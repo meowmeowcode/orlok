@@ -1,26 +1,29 @@
-use std::cell::RefCell;
 use std::cmp::Ordering;
 use std::marker::PhantomData;
 
+use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
+use tokio::sync::RwLock;
 
 use crate::base::Repo;
 use crate::query::{Op, Order, Query, F};
 
 pub struct MemoryRepo<T>
-where T: Clone + Serialize + for<'de> Deserialize<'de>
+where
+    T: Clone + Serialize + for<'de> Deserialize<'de>,
 {
-    items: RefCell<Vec<Value>>,
+    items: RwLock<Vec<Value>>,
     phantom: PhantomData<T>,
 }
 
 impl<T> MemoryRepo<T>
-where T: Clone + Serialize + for<'de> Deserialize<'de>
+where
+    T: Clone + Serialize + for<'de> Deserialize<'de>,
 {
     pub fn new() -> Self {
         Self {
-            items: RefCell::new(vec![]),
+            items: RwLock::new(vec![]),
             phantom: PhantomData,
         }
     }
@@ -30,12 +33,13 @@ where T: Clone + Serialize + for<'de> Deserialize<'de>
     }
 }
 
-
+#[async_trait]
 impl<T> Repo<T> for MemoryRepo<T>
-where T: Clone + Serialize + for<'de> Deserialize<'de>
+where
+    T: Clone + Serialize + for<'de> Deserialize<'de> + std::marker::Sync + std::marker::Send,
 {
-    fn get(&self, filter: &F) -> Option<T> {
-        let items = self.items.borrow();
+    async fn get(&self, filter: &F) -> Option<T> {
+        let items = self.items.read().await;
         let item = items.iter().find(|x| matches_filter(x, filter));
 
         match item {
@@ -44,8 +48,8 @@ where T: Clone + Serialize + for<'de> Deserialize<'de>
         }
     }
 
-    fn get_many(&self, query: &Query) -> Vec<T> {
-        let items = self.items.borrow();
+    async fn get_many(&self, query: &Query) -> Vec<T> {
+        let items = self.items.read().await;
         let mut sorted: Vec<&Value> = Vec::new();
         let mut filtered: Box<dyn Iterator<Item = &Value>> = Box::new(items.iter());
 
@@ -72,14 +76,15 @@ where T: Clone + Serialize + for<'de> Deserialize<'de>
         filtered.map(|x| Self::load(x.clone())).collect()
     }
 
-    fn add(&self, entity: &T) {
+    async fn add(&self, entity: &T) {
         self.items
-            .borrow_mut()
+            .write()
+            .await
             .push(serde_json::to_value(entity).unwrap());
     }
 
-    fn delete(&self, filter: &F) {
-        let mut items = self.items.borrow_mut();
+    async fn delete(&self, filter: &F) {
+        let mut items = self.items.write().await;
 
         while let Some((index, _)) = items
             .iter()
@@ -90,8 +95,8 @@ where T: Clone + Serialize + for<'de> Deserialize<'de>
         }
     }
 
-    fn update(&self, filter: &F, entity: &T) {
-        let mut items = self.items.borrow_mut();
+    async fn update(&self, filter: &F, entity: &T) {
+        let mut items = self.items.write().await;
         if let Some((index, _)) = items
             .iter()
             .enumerate()
@@ -101,7 +106,6 @@ where T: Clone + Serialize + for<'de> Deserialize<'de>
         }
     }
 }
-
 
 fn matches_filter(v: &Value, f: &F) -> bool {
     match f {

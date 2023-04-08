@@ -17,20 +17,20 @@ impl User {
     }
 }
 
-pub fn add_alice(repo: &impl Repo<User>) -> User {
+pub async fn add_alice(repo: &impl Repo<User>) -> User {
     let u = User::new(1, "Alice");
-    repo.add(&u);
+    repo.add(&u).await;
     u
 }
 
-pub fn add_bob(repo: &impl Repo<User>) -> User {
+pub async fn add_bob(repo: &impl Repo<User>) -> User {
     let u = User::new(2, "Bob");
-    repo.add(&u);
+    repo.add(&u).await;
     u
 }
 
-pub fn add_eve(repo: &impl Repo<User>) -> User {
+pub async fn add_eve(repo: &impl Repo<User>) -> User {
     let u = User::new(3, "Eve");
-    repo.add(&u);
+    repo.add(&u).await;
     u
 }

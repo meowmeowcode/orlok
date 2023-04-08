@@ -140,7 +140,6 @@ impl EndsWithArg for &str {
     }
 }
 
-
 impl F {
     pub fn eq(field: &str, val: impl EqArg) -> Self {
         Self::Value {

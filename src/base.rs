@@ -1,9 +1,12 @@
+use async_trait::async_trait;
+
 use crate::query::{Query, F};
 
+#[async_trait]
 pub trait Repo<T> {
-    fn get(&self, filter: &F) -> Option<T>;
-    fn get_many(&self, query: &Query) -> Vec<T>;
-    fn add(&self, entity: &T);
-    fn update(&self, filter: &F, entity: &T);
-    fn delete(&self, filter: &F);
+    async fn get(&self, filter: &F) -> Option<T>;
+    async fn get_many(&self, query: &Query) -> Vec<T>;
+    async fn add(&self, entity: &T);
+    async fn update(&self, filter: &F, entity: &T);
+    async fn delete(&self, filter: &F);
 }
