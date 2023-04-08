@@ -1,6 +1,5 @@
 #[derive(Clone)]
 pub enum Op {
-    IsNone,
     StrEq(String),
     StrNe(String),
     StrStartsWith(String),
@@ -15,14 +14,14 @@ pub enum Op {
     IntGte(i64),
     IntBetween(i64, i64),
     IntIn(Vec<i64>),
-    And(Vec<F>),
-    Or(Vec<F>),
 }
 
 #[derive(Clone)]
-pub struct F {
-    field: String,
-    op: Op,
+pub enum F {
+    And(Vec<F>),
+    Or(Vec<F>),
+    IsNone(String),
+    Value { field: String, op: Op },
 }
 
 pub trait EqArg {
@@ -141,76 +140,95 @@ impl EndsWithArg for &str {
     }
 }
 
+
 impl F {
-    pub fn op(&self) -> &Op {
-        &self.op
-    }
-
-    pub fn field(&self) -> &String {
-        &self.field
-    }
-
-    fn new(field: &str, op: Op) -> Self {
-        Self {
+    pub fn eq(field: &str, val: impl EqArg) -> Self {
+        Self::Value {
             field: field.to_string(),
-            op,
+            op: val.to_op(),
         }
     }
 
-    pub fn eq(field: &str, val: impl EqArg) -> Self {
-        Self::new(field, val.to_op())
-    }
-
     pub fn is_none(field: &str) -> Self {
-        Self::new(field, Op::IsNone)
+        Self::IsNone(field.to_string())
     }
 
     pub fn ne(field: &str, val: impl NeArg) -> Self {
-        Self::new(field, val.to_op())
+        Self::Value {
+            field: field.to_string(),
+            op: val.to_op(),
+        }
     }
 
     pub fn lt(field: &str, val: impl LtArg) -> Self {
-        Self::new(field, val.to_op())
+        Self::Value {
+            field: field.to_string(),
+            op: val.to_op(),
+        }
     }
 
     pub fn gt(field: &str, val: impl GtArg) -> Self {
-        Self::new(field, val.to_op())
+        Self::Value {
+            field: field.to_string(),
+            op: val.to_op(),
+        }
     }
 
     pub fn lte(field: &str, val: impl LteArg) -> Self {
-        Self::new(field, val.to_op())
+        Self::Value {
+            field: field.to_string(),
+            op: val.to_op(),
+        }
     }
 
     pub fn gte(field: &str, val: impl GteArg) -> Self {
-        Self::new(field, val.to_op())
+        Self::Value {
+            field: field.to_string(),
+            op: val.to_op(),
+        }
     }
 
     pub fn between(field: &str, val: impl BetweenArg) -> Self {
-        Self::new(field, val.to_op())
+        Self::Value {
+            field: field.to_string(),
+            op: val.to_op(),
+        }
     }
 
     pub fn in_(field: &str, val: impl InArg) -> Self {
-        Self::new(field, val.to_op())
+        Self::Value {
+            field: field.to_string(),
+            op: val.to_op(),
+        }
     }
 
     pub fn contains(field: &str, val: impl ContainsArg) -> Self {
-        Self::new(field, val.to_op())
+        Self::Value {
+            field: field.to_string(),
+            op: val.to_op(),
+        }
     }
 
     pub fn starts_with(field: &str, val: impl StartsWithArg) -> Self {
-        Self::new(field, val.to_op())
+        Self::Value {
+            field: field.to_string(),
+            op: val.to_op(),
+        }
     }
 
     pub fn ends_with(field: &str, val: impl EndsWithArg) -> Self {
-        Self::new(field, val.to_op())
+        Self::Value {
+            field: field.to_string(),
+            op: val.to_op(),
+        }
     }
 
     pub fn and(filters: Vec<F>) -> Self {
-        Self::new("", Op::And(filters))
+        Self::And(filters)
     }
 
     pub fn or(filters: Vec<F>) -> Self {
-        Self::new("", Op::Or(filters))
+        Self::Or(filters)
     }
 }
 

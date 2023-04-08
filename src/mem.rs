@@ -8,12 +8,16 @@ use serde_json::Value;
 use crate::base::Repo;
 use crate::query::{Op, Order, Query, F};
 
-pub struct MemoryRepo<T: Serialize> {
+pub struct MemoryRepo<T>
+where T: Clone + Serialize + for<'de> Deserialize<'de>
+{
     items: RefCell<Vec<Value>>,
     phantom: PhantomData<T>,
 }
 
-impl<'a, T: Serialize + for<'b> Deserialize<'b>> MemoryRepo<T> {
+impl<T> MemoryRepo<T>
+where T: Clone + Serialize + for<'de> Deserialize<'de>
+{
     pub fn new() -> Self {
         Self {
             items: RefCell::new(vec![]),
@@ -24,58 +28,132 @@ impl<'a, T: Serialize + for<'b> Deserialize<'b>> MemoryRepo<T> {
     fn load(item: Value) -> T {
         serde_json::from_value(item).unwrap()
     }
+}
 
-    fn matches_filter(v: &Value, f: &F) -> bool {
-        match f.op() {
-            Op::And(filters) => Self::matches_all_filters(v, filters),
-            Op::Or(filters) => Self::matches_any_filter(v, filters),
-            _ => match &v[f.field()] {
-                Value::String(s) => match f.op() {
-                    Op::StrEq(val) => *s == *val,
-                    Op::StrNe(val) => *s != *val,
-                    Op::StrContains(val) => s.contains(val),
-                    Op::StrStartsWith(val) => s.starts_with(val),
-                    Op::StrEndsWith(val) => s.ends_with(val),
-                    Op::StrIn(val) => val.contains(s),
-                    _ => false,
-                },
-                Value::Number(n) => {
-                    let n = n.as_i64().unwrap();
-                    match f.op() {
-                        Op::IntEq(val) => n == *val,
-                        Op::IntNe(val) => n != *val,
-                        Op::IntLt(val) => n < *val,
-                        Op::IntGt(val) => n > *val,
-                        Op::IntLte(val) => n <= *val,
-                        Op::IntGte(val) => n >= *val,
-                        Op::IntBetween(val1, val2) => *val1 <= n && n <= *val2,
-                        Op::IntIn(val) => val.contains(&n),
-                        _ => false,
-                    }
-                }
-                _ => false,
-            },
+
+impl<T> Repo<T> for MemoryRepo<T>
+where T: Clone + Serialize + for<'de> Deserialize<'de>
+{
+    fn get(&self, filter: &F) -> Option<T> {
+        let items = self.items.borrow();
+        let item = items.iter().find(|x| matches_filter(x, filter));
+
+        match item {
+            None => None,
+            Some(i) => Some(Self::load(i.clone())),
         }
     }
 
-    fn matches_all_filters(v: &Value, filters: &[F]) -> bool {
-        filters.iter().all(|f| Self::matches_filter(&v, f))
+    fn get_many(&self, query: &Query) -> Vec<T> {
+        let items = self.items.borrow();
+        let mut sorted: Vec<&Value> = Vec::new();
+        let mut filtered: Box<dyn Iterator<Item = &Value>> = Box::new(items.iter());
+
+        if let Some(filter) = &query.filter {
+            filtered = Box::new(filtered.filter(move |x| matches_filter(x, &filter.clone())))
+        }
+
+        if let Some(order) = &query.order {
+            sorted.extend(filtered);
+            sorted.sort_by(|x, y| {
+                vals_cmp(&extract_fields(x, order), &extract_fields(y, order), order)
+            });
+            filtered = Box::new(sorted.iter().copied());
+        }
+
+        if let Some(offset) = query.offset {
+            filtered = Box::new(filtered.skip(offset));
+        }
+
+        if let Some(limit) = query.limit {
+            filtered = Box::new(filtered.take(limit));
+        }
+
+        filtered.map(|x| Self::load(x.clone())).collect()
     }
 
-    fn matches_any_filter(v: &Value, filters: &[F]) -> bool {
-        filters.iter().any(|f| Self::matches_filter(&v, f))
+    fn add(&self, entity: &T) {
+        self.items
+            .borrow_mut()
+            .push(serde_json::to_value(entity).unwrap());
     }
 
-    fn extract_fields(v: &'a Value, order: &Vec<Order>) -> Vec<&'a Value> {
-        order
+    fn delete(&self, filter: &F) {
+        let mut items = self.items.borrow_mut();
+
+        while let Some((index, _)) = items
             .iter()
-            .map(|f| match f {
-                Order::Asc(field) => field,
-                Order::Desc(field) => field,
-            })
-            .map(|f| &v[f])
-            .collect()
+            .enumerate()
+            .find(|(_, x)| matches_filter(x, filter))
+        {
+            items.remove(index);
+        }
     }
+
+    fn update(&self, filter: &F, entity: &T) {
+        let mut items = self.items.borrow_mut();
+        if let Some((index, _)) = items
+            .iter()
+            .enumerate()
+            .find(|(_, x)| matches_filter(x, filter))
+        {
+            items[index] = serde_json::to_value(entity).unwrap();
+        }
+    }
+}
+
+
+fn matches_filter(v: &Value, f: &F) -> bool {
+    match f {
+        F::And(filters) => matches_all_filters(v, filters),
+        F::Or(filters) => matches_any_filter(v, filters),
+        F::IsNone(field) => v[field].is_null(),
+        F::Value { field, op } => match &v[field] {
+            Value::String(s) => match op {
+                Op::StrEq(val) => *s == *val,
+                Op::StrNe(val) => *s != *val,
+                Op::StrContains(val) => s.contains(val),
+                Op::StrStartsWith(val) => s.starts_with(val),
+                Op::StrEndsWith(val) => s.ends_with(val),
+                Op::StrIn(val) => val.contains(s),
+                _ => false,
+            },
+            Value::Number(n) => {
+                let n = n.as_i64().unwrap();
+                match op {
+                    Op::IntEq(val) => n == *val,
+                    Op::IntNe(val) => n != *val,
+                    Op::IntLt(val) => n < *val,
+                    Op::IntGt(val) => n > *val,
+                    Op::IntLte(val) => n <= *val,
+                    Op::IntGte(val) => n >= *val,
+                    Op::IntBetween(val1, val2) => *val1 <= n && n <= *val2,
+                    Op::IntIn(val) => val.contains(&n),
+                    _ => false,
+                }
+            }
+            _ => false,
+        },
+    }
+}
+
+fn matches_all_filters(v: &Value, filters: &[F]) -> bool {
+    filters.iter().all(|f| matches_filter(&v, f))
+}
+
+fn matches_any_filter(v: &Value, filters: &[F]) -> bool {
+    filters.iter().any(|f| matches_filter(&v, f))
+}
+
+fn extract_fields<'a>(v: &'a Value, order: &Vec<Order>) -> Vec<&'a Value> {
+    order
+        .iter()
+        .map(|f| match f {
+            Order::Asc(field) => field,
+            Order::Desc(field) => field,
+        })
+        .map(|f| &v[f])
+        .collect()
 }
 
 fn val_cmp(x: &Value, y: &Value, order: &Order) -> Ordering {
@@ -105,77 +183,4 @@ fn vals_cmp(xs: &Vec<&Value>, ys: &Vec<&Value>, fields: &Vec<Order>) -> Ordering
     }
 
     Ordering::Equal
-}
-
-impl<'a, T: Clone + Serialize + for<'b> Deserialize<'b>> Repo<T> for MemoryRepo<T> {
-    fn get(&self, filter: &F) -> Option<T> {
-        let items = self.items.borrow();
-        let item = items.iter().find(|x| Self::matches_filter(x, filter));
-
-        match item {
-            None => None,
-            Some(i) => Some(Self::load(i.clone())),
-        }
-    }
-
-    fn get_many(&self, query: &Query) -> Vec<T> {
-        let items = self.items.borrow();
-        let mut sorted: Vec<&Value> = Vec::new();
-        let mut filtered: Box<dyn Iterator<Item = &Value>> = Box::new(items.iter());
-
-        if let Some(filter) = &query.filter {
-            filtered = Box::new(filtered.filter(move |x| Self::matches_filter(x, &filter.clone())))
-        }
-
-        if let Some(order) = &query.order {
-            sorted.extend(filtered);
-            sorted.sort_by(|x, y| {
-                vals_cmp(
-                    &Self::extract_fields(x, order),
-                    &Self::extract_fields(y, order),
-                    order,
-                )
-            });
-            filtered = Box::new(sorted.iter().copied());
-        }
-
-        if let Some(offset) = query.offset {
-            filtered = Box::new(filtered.skip(offset));
-        }
-
-        if let Some(limit) = query.limit {
-            filtered = Box::new(filtered.take(limit));
-        }
-
-        filtered.map(|x| Self::load(x.clone())).collect()
-    }
-
-    fn add(&self, entity: &T) {
-        self.items
-            .borrow_mut()
-            .push(serde_json::to_value(entity).unwrap());
-    }
-
-    fn delete(&self, filter: &F) {
-        let mut items = self.items.borrow_mut();
-
-        while let Some((index, _)) = items
-            .iter()
-            .enumerate()
-            .find(|(_, x)| Self::matches_filter(x, filter))
-        {
-            items.remove(index);
-        }
-    }
-
-    fn update(&self, filter: &F, entity: &T) {
-        let mut items = self.items.borrow_mut();
-        if let Some((index, _)) = items
-            .iter()
-            .enumerate()
-            .find(|(_, x)| Self::matches_filter(x, filter))
-        {
-            items[index] = serde_json::to_value(entity).unwrap();
-        }
-    }
 }
