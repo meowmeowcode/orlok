@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::fmt::Write;
 
 use async_trait::async_trait;
@@ -6,10 +7,9 @@ use sea_query::{
     Condition, IntoCondition, Order as SeaOrder, Query as SeaQuery, SelectStatement, SimpleExpr,
 };
 use sea_query::{Expr, Iden};
+use sea_query_binder::SqlxBinder;
 use sqlx::postgres::PgRow;
 use sqlx::PgPool;
-use std::collections::HashMap;
-use std::marker::PhantomData;
 
 use crate::base::Repo;
 use crate::query::{Op, Order, Query, F};
@@ -104,13 +104,13 @@ where
     T: Sync + Send,
 {
     async fn get(&self, filter: &F) -> Option<T> {
-        let query = {
+        let (sql, values) = {
             let mut query = (self.query)(&self.table);
             self.apply_filter(&mut query, filter);
-            query.to_string(PostgresQueryBuilder)
+            query.build_sqlx(PostgresQueryBuilder)
         };
 
-        let result = sqlx::query(&query).fetch_one(self.pool).await;
+        let result = sqlx::query_with(&sql, values).fetch_one(self.pool).await;
 
         match result {
             Ok(row) => Some((self.load)(&row)),
@@ -120,7 +120,7 @@ where
     }
 
     async fn get_many(&self, query: &Query) -> Vec<T> {
-        let sql = {
+        let (sql, values) = {
             let mut sql = (self.query)(&self.table);
 
             if let Some(filter) = &query.filter {
@@ -147,10 +147,10 @@ where
                 );
             }
 
-            sql.to_string(PostgresQueryBuilder)
+            sql.build_sqlx(PostgresQueryBuilder)
         };
 
-        let result = sqlx::query(&sql).fetch_all(self.pool).await;
+        let result = sqlx::query_with(&sql, values).fetch_all(self.pool).await;
 
         match result {
             Ok(rows) => rows.iter().map(self.load).collect(),
@@ -159,7 +159,7 @@ where
     }
 
     async fn update(&self, filter: &F, entity: &T) {
-        let sql = {
+        let (sql, values) = {
             let data = (self.dump)(entity);
 
             SeaQuery::update()
@@ -170,26 +170,32 @@ where
                 )
                 .cond_where(Self::filter_to_cond(filter))
                 .to_owned()
-                .to_string(PostgresQueryBuilder)
+                .build_sqlx(PostgresQueryBuilder)
         };
 
-        sqlx::query(&sql).execute(self.pool).await.unwrap();
+        sqlx::query_with(&sql, values)
+            .execute(self.pool)
+            .await
+            .unwrap();
     }
 
     async fn delete(&self, filter: &F) {
-        let sql = {
+        let (sql, values) = {
             let mut sql = SeaQuery::delete()
                 .from_table(Name(self.table.clone()))
                 .to_owned();
             sql.cond_where(Self::filter_to_cond(filter));
-            sql.to_string(PostgresQueryBuilder)
+            sql.build_sqlx(PostgresQueryBuilder)
         };
 
-        sqlx::query(&sql).execute(self.pool).await.unwrap();
+        sqlx::query_with(&sql, values)
+            .execute(self.pool)
+            .await
+            .unwrap();
     }
 
     async fn add(&self, entity: &T) {
-        let query = {
+        let (sql, values) = {
             let data = (self.dump)(entity);
             let keys: Vec<Name> = data.keys().map(|k| Name(k.clone())).collect();
 
@@ -198,9 +204,12 @@ where
                 .columns(keys)
                 .values_panic(data.into_values())
                 .to_owned()
-                .to_string(PostgresQueryBuilder)
+                .build_sqlx(PostgresQueryBuilder)
         };
 
-        sqlx::query(&query).execute(self.pool).await.unwrap();
+        sqlx::query_with(&sql, values)
+            .execute(self.pool)
+            .await
+            .unwrap();
     }
 }
