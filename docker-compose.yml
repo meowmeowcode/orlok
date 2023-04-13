@@ -1,0 +1,10 @@
+version: "3.9"
+services:
+  postgres:
+    image: "postgres:13.4-alpine"
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_USER: orlok
+      POSTGRES_PASSWORD: orlok
+      POSTGRES_DB: orlok

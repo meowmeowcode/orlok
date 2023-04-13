@@ -36,7 +36,7 @@ where
 #[async_trait]
 impl<T> Repo<T> for MemoryRepo<T>
 where
-    T: Clone + Serialize + for<'de> Deserialize<'de> + std::marker::Sync + std::marker::Send,
+    T: Clone + Serialize + for<'de> Deserialize<'de> + Sync + Send,
 {
     async fn get(&self, filter: &F) -> Option<T> {
         let items = self.items.read().await;
