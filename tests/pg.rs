@@ -33,14 +33,17 @@ fn load_user(row: &PgRow) -> common::User {
 
 async fn users_repo<'a>() -> PgRepo<'a, common::User> {
     let pool = POOL.get().await;
+
     sqlx::query("create table if not exists users (id bigint, name text)")
         .execute(pool)
         .await
         .unwrap();
+
     sqlx::query("delete from users")
         .execute(pool)
         .await
         .unwrap();
+
     PgRepo::new(pool, "users".to_string(), dump_user, load_user)
 }
 
@@ -57,9 +60,9 @@ async fn get() {
     let repo = users_repo().await;
     let alice = common::add_alice(&repo).await;
     let bob = common::add_bob(&repo).await;
-    let result = repo.get(&F::eq("name", "Alice")).await.unwrap();
+    let result = repo.get(&F::eq("name", "Alice")).await.unwrap().unwrap();
     assert_eq!(result, alice);
-    let result = repo.get(&F::eq("id", 2)).await.unwrap();
+    let result = repo.get(&F::eq("id", 2)).await.unwrap().unwrap();
     assert_eq!(result, bob);
 }
 
@@ -67,7 +70,7 @@ async fn get() {
 async fn get_none() {
     let repo = users_repo().await;
     common::add_alice(&repo).await;
-    let uu = repo.get(&F::eq("name", "test")).await;
+    let uu = repo.get(&F::eq("name", "test")).await.unwrap();
     assert!(uu.is_none());
 }
 
@@ -80,7 +83,9 @@ async fn and() {
 
     let result = repo
         .get_many(&Query::filter(F::and(vec![F::gt("id", 1), F::lt("id", 3)])))
-        .await;
+        .await
+        .unwrap();
+
     assert_eq!(result, vec![bob]);
 }
 
@@ -93,7 +98,9 @@ async fn or() {
 
     let result = repo
         .get_many(&Query::filter(F::or(vec![F::eq("id", 1), F::eq("id", 3)])))
-        .await;
+        .await
+        .unwrap();
+
     assert_eq!(result, vec![alice, eve]);
 }
 
@@ -103,7 +110,7 @@ async fn int_ne() {
     let alice = common::add_alice(&repo).await;
     common::add_bob(&repo).await;
     let eve = common::add_eve(&repo).await;
-    let users = repo.get_many(&Query::filter(F::ne("id", 2))).await;
+    let users = repo.get_many(&Query::filter(F::ne("id", 2))).await.unwrap();
     assert_eq!(users, vec![alice, eve]);
 }
 
@@ -113,7 +120,7 @@ async fn int_lt() {
     let alice = common::add_alice(&repo).await;
     let bob = common::add_bob(&repo).await;
     common::add_eve(&repo).await;
-    let users = repo.get_many(&Query::filter(F::lt("id", 3))).await;
+    let users = repo.get_many(&Query::filter(F::lt("id", 3))).await.unwrap();
     assert_eq!(users, vec![alice, bob]);
 }
 
@@ -123,7 +130,7 @@ async fn int_gt() {
     common::add_alice(&repo).await;
     let bob = common::add_bob(&repo).await;
     let eve = common::add_eve(&repo).await;
-    let users = repo.get_many(&Query::filter(F::gt("id", 1))).await;
+    let users = repo.get_many(&Query::filter(F::gt("id", 1))).await.unwrap();
     assert_eq!(users, vec![bob, eve]);
 }
 
@@ -133,7 +140,10 @@ async fn int_lte() {
     let alice = common::add_alice(&repo).await;
     let bob = common::add_bob(&repo).await;
     common::add_eve(&repo).await;
-    let users = repo.get_many(&Query::filter(F::lte("id", 2))).await;
+    let users = repo
+        .get_many(&Query::filter(F::lte("id", 2)))
+        .await
+        .unwrap();
     assert_eq!(users, vec![alice, bob]);
 }
 
@@ -144,7 +154,7 @@ async fn int_gte() {
     let bob = common::add_bob(&repo).await;
     let eve = common::add_eve(&repo).await;
     let query = Query::filter(F::gte("id", 2));
-    let users = repo.get_many(&query).await;
+    let users = repo.get_many(&query).await.unwrap();
     assert_eq!(users, vec![bob, eve]);
 }
 
@@ -154,9 +164,12 @@ async fn int_in() {
     let alice = common::add_alice(&repo).await;
     common::add_bob(&repo).await;
     let eve = common::add_eve(&repo).await;
+
     let users = repo
         .get_many(&Query::filter(F::in_("id", vec![1, 3])))
-        .await;
+        .await
+        .unwrap();
+
     assert_eq!(users, vec![alice, eve]);
 }
 
@@ -166,9 +179,12 @@ async fn int_between() {
     let alice = common::add_alice(&repo).await;
     let bob = common::add_bob(&repo).await;
     common::add_eve(&repo).await;
+
     let users = repo
         .get_many(&Query::filter(F::between("id", (1, 2))))
-        .await;
+        .await
+        .unwrap();
+
     assert_eq!(users, vec![alice, bob]);
 }
 
@@ -178,9 +194,12 @@ async fn contains() {
     common::add_alice(&repo).await;
     let bob = common::add_bob(&repo).await;
     common::add_eve(&repo).await;
+
     let users = repo
         .get_many(&Query::filter(F::contains("name", "o")))
-        .await;
+        .await
+        .unwrap();
+
     assert_eq!(users, vec![bob]);
 }
 
@@ -190,9 +209,12 @@ async fn starts_with() {
     common::add_alice(&repo).await;
     common::add_bob(&repo).await;
     let eve = common::add_eve(&repo).await;
+
     let users = repo
         .get_many(&Query::filter(F::starts_with("name", "E")))
-        .await;
+        .await
+        .unwrap();
+
     assert_eq!(users, vec![eve]);
 }
 
@@ -202,9 +224,12 @@ async fn ends_with() {
     let alice = common::add_alice(&repo).await;
     common::add_bob(&repo).await;
     let eve = common::add_eve(&repo).await;
+
     let users = repo
         .get_many(&Query::filter(F::ends_with("name", "e")))
-        .await;
+        .await
+        .unwrap();
+
     assert_eq!(users, vec![alice, eve]);
 }
 
@@ -214,7 +239,7 @@ async fn limit() {
     let alice = common::add_alice(&repo).await;
     let bob = common::add_bob(&repo).await;
     common::add_eve(&repo).await;
-    let users = repo.get_many(&Query::new().limit(2)).await;
+    let users = repo.get_many(&Query::new().limit(2)).await.unwrap();
     assert_eq!(users, vec![alice, bob]);
 }
 
@@ -224,7 +249,7 @@ async fn offset() {
     common::add_alice(&repo).await;
     let bob = common::add_bob(&repo).await;
     let eve = common::add_eve(&repo).await;
-    let users = repo.get_many(&Query::new().offset(1)).await;
+    let users = repo.get_many(&Query::new().offset(1)).await.unwrap();
     assert_eq!(users, vec![bob, eve]);
 }
 
@@ -234,10 +259,13 @@ async fn order() {
     let bob = common::add_bob(&repo).await;
     let eve = common::add_eve(&repo).await;
     let alice = common::add_alice(&repo).await;
-    let unordered = repo.get_many(&Query::new()).await;
+    let unordered = repo.get_many(&Query::new()).await.unwrap();
+
     let ordered = repo
         .get_many(&Query::new().order(vec![Order::Asc("name".to_string())]))
-        .await;
+        .await
+        .unwrap();
+
     assert_eq!(unordered, vec![bob.clone(), eve.clone(), alice.clone()]);
     assert_eq!(ordered, vec![alice, bob, eve]);
 }
@@ -248,9 +276,12 @@ async fn order_desc() {
     let bob = common::add_bob(&repo).await;
     let eve = common::add_eve(&repo).await;
     let alice = common::add_alice(&repo).await;
+
     let ordered = repo
         .get_many(&Query::new().order(vec![Order::Desc("name".to_string())]))
-        .await;
+        .await
+        .unwrap();
+
     assert_eq!(ordered, vec![eve, bob, alice]);
 }
 
@@ -260,9 +291,12 @@ async fn delete() {
     common::add_alice(&repo).await;
     common::add_bob(&repo).await;
     let eve = common::add_eve(&repo).await;
+
     repo.delete(&F::or(vec![F::eq("name", "Bob"), F::eq("name", "Alice")]))
-        .await;
-    let users = repo.get_many(&Query::new()).await;
+        .await
+        .unwrap();
+
+    let users = repo.get_many(&Query::new()).await.unwrap();
     assert_eq!(users, vec![eve]);
 }
 
@@ -274,8 +308,11 @@ async fn update() {
     let eve = common::add_eve(&repo).await;
     bob.name = "Robert".to_string();
     repo.update(&F::eq("id", bob.id), &bob).await;
+
     let users = repo
         .get_many(&Query::new().order(vec![Order::Asc("id".to_string())]))
-        .await;
+        .await
+        .unwrap();
+
     assert_eq!(users, vec![alice, bob, eve]);
 }

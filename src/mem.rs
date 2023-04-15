@@ -1,6 +1,7 @@
 use std::cmp::Ordering;
 use std::marker::PhantomData;
 
+use anyhow::Result;
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -38,17 +39,17 @@ impl<T> Repo<T> for MemoryRepo<T>
 where
     T: Clone + Serialize + for<'de> Deserialize<'de> + Sync + Send,
 {
-    async fn get(&self, filter: &F) -> Option<T> {
+    async fn get(&self, filter: &F) -> Result<Option<T>> {
         let items = self.items.read().await;
         let item = items.iter().find(|x| matches_filter(x, filter));
 
         match item {
-            None => None,
-            Some(i) => Some(Self::load(i.clone())),
+            None => Ok(None),
+            Some(i) => Ok(Some(Self::load(i.clone()))),
         }
     }
 
-    async fn get_many(&self, query: &Query) -> Vec<T> {
+    async fn get_many(&self, query: &Query) -> Result<Vec<T>> {
         let items = self.items.read().await;
         let mut sorted: Vec<&Value> = Vec::new();
         let mut filtered: Box<dyn Iterator<Item = &Value>> = Box::new(items.iter());
@@ -73,17 +74,18 @@ where
             filtered = Box::new(filtered.take(limit));
         }
 
-        filtered.map(|x| Self::load(x.clone())).collect()
+        Ok(filtered.map(|x| Self::load(x.clone())).collect())
     }
 
-    async fn add(&self, entity: &T) {
-        self.items
-            .write()
-            .await
-            .push(serde_json::to_value(entity).unwrap());
+    async fn add(&self, entity: &T) -> Result<()> {
+        let item = serde_json::to_value(entity)?;
+
+        self.items.write().await.push(item);
+
+        Ok(())
     }
 
-    async fn delete(&self, filter: &F) {
+    async fn delete(&self, filter: &F) -> Result<()> {
         let mut items = self.items.write().await;
 
         while let Some((index, _)) = items
@@ -93,17 +95,23 @@ where
         {
             items.remove(index);
         }
+
+        Ok(())
     }
 
-    async fn update(&self, filter: &F, entity: &T) {
+    async fn update(&self, filter: &F, entity: &T) -> Result<()> {
         let mut items = self.items.write().await;
+        let item = serde_json::to_value(entity)?;
+
         if let Some((index, _)) = items
             .iter()
             .enumerate()
             .find(|(_, x)| matches_filter(x, filter))
         {
-            items[index] = serde_json::to_value(entity).unwrap();
+            items[index] = item;
         }
+
+        Ok(())
     }
 }
 

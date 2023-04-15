@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 use std::fmt::Write;
 
+use anyhow::{bail, Result};
 use async_trait::async_trait;
 use sea_query::backend::PostgresQueryBuilder;
 use sea_query::{
@@ -103,7 +104,7 @@ impl<'pool, T> Repo<T> for PgRepo<'pool, T>
 where
     T: Sync + Send,
 {
-    async fn get(&self, filter: &F) -> Option<T> {
+    async fn get(&self, filter: &F) -> Result<Option<T>> {
         let (sql, values) = {
             let mut query = (self.query)(&self.table);
             self.apply_filter(&mut query, filter);
@@ -113,13 +114,13 @@ where
         let result = sqlx::query_with(&sql, values).fetch_one(self.pool).await;
 
         match result {
-            Ok(row) => Some((self.load)(&row)),
-            Err(sqlx::Error::RowNotFound) => None,
-            Err(err) => panic!("problem executing a query {:?}", err),
+            Ok(row) => Ok(Some((self.load)(&row))),
+            Err(sqlx::Error::RowNotFound) => Ok(None),
+            Err(err) => bail!(err),
         }
     }
 
-    async fn get_many(&self, query: &Query) -> Vec<T> {
+    async fn get_many(&self, query: &Query) -> Result<Vec<T>> {
         let (sql, values) = {
             let mut sql = (self.query)(&self.table);
 
@@ -153,12 +154,12 @@ where
         let result = sqlx::query_with(&sql, values).fetch_all(self.pool).await;
 
         match result {
-            Ok(rows) => rows.iter().map(self.load).collect(),
-            Err(err) => panic!("problem executing a query {:?}", err),
+            Ok(rows) => Ok(rows.iter().map(self.load).collect()),
+            Err(err) => bail!(err),
         }
     }
 
-    async fn update(&self, filter: &F, entity: &T) {
+    async fn update(&self, filter: &F, entity: &T) -> Result<()> {
         let (sql, values) = {
             let data = (self.dump)(entity);
 
@@ -173,13 +174,11 @@ where
                 .build_sqlx(PostgresQueryBuilder)
         };
 
-        sqlx::query_with(&sql, values)
-            .execute(self.pool)
-            .await
-            .unwrap();
+        sqlx::query_with(&sql, values).execute(self.pool).await?;
+        Ok(())
     }
 
-    async fn delete(&self, filter: &F) {
+    async fn delete(&self, filter: &F) -> Result<()> {
         let (sql, values) = {
             let mut sql = SeaQuery::delete()
                 .from_table(Name(self.table.clone()))
@@ -188,13 +187,11 @@ where
             sql.build_sqlx(PostgresQueryBuilder)
         };
 
-        sqlx::query_with(&sql, values)
-            .execute(self.pool)
-            .await
-            .unwrap();
+        sqlx::query_with(&sql, values).execute(self.pool).await?;
+        Ok(())
     }
 
-    async fn add(&self, entity: &T) {
+    async fn add(&self, entity: &T) -> Result<()> {
         let (sql, values) = {
             let data = (self.dump)(entity);
             let keys: Vec<Name> = data.keys().map(|k| Name(k.clone())).collect();
@@ -207,9 +204,7 @@ where
                 .build_sqlx(PostgresQueryBuilder)
         };
 
-        sqlx::query_with(&sql, values)
-            .execute(self.pool)
-            .await
-            .unwrap();
+        sqlx::query_with(&sql, values).execute(self.pool).await?;
+        Ok(())
     }
 }

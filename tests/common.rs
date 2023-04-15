@@ -19,18 +19,18 @@ impl User {
 
 pub async fn add_alice(repo: &impl Repo<User>) -> User {
     let u = User::new(1, "Alice");
-    repo.add(&u).await;
+    repo.add(&u).await.unwrap();
     u
 }
 
 pub async fn add_bob(repo: &impl Repo<User>) -> User {
     let u = User::new(2, "Bob");
-    repo.add(&u).await;
+    repo.add(&u).await.unwrap();
     u
 }
 
 pub async fn add_eve(repo: &impl Repo<User>) -> User {
     let u = User::new(3, "Eve");
-    repo.add(&u).await;
+    repo.add(&u).await.unwrap();
     u
 }
