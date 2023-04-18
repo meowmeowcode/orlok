@@ -231,11 +231,13 @@ impl F {
     }
 }
 
+#[derive(Clone)]
 pub enum Order {
     Asc(String),
     Desc(String),
 }
 
+#[derive(Clone)]
 pub struct Query {
     pub filter: Option<F>,
     pub limit: Option<usize>,
