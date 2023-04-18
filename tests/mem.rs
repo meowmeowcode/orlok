@@ -37,7 +37,7 @@ async fn and() {
     common::add_eve(&repo).await;
 
     let result = repo
-        .get_many(&Query::filter(F::and(vec![F::gt("id", 1), F::lt("id", 3)])))
+        .get_many(&Query::filter(F::and(&[F::gt("id", 1), F::lt("id", 3)])))
         .await
         .unwrap();
     assert_eq!(result, vec![bob]);
@@ -51,7 +51,7 @@ async fn or() {
     let eve = common::add_eve(&repo).await;
 
     let result = repo
-        .get_many(&Query::filter(F::or(vec![F::eq("id", 1), F::eq("id", 3)])))
+        .get_many(&Query::filter(F::or(&[F::eq("id", 1), F::eq("id", 3)])))
         .await
         .unwrap();
     assert_eq!(result, vec![alice, eve]);
@@ -230,7 +230,7 @@ async fn delete() {
     common::add_alice(&repo).await;
     common::add_bob(&repo).await;
     let eve = common::add_eve(&repo).await;
-    repo.delete(&F::or(vec![F::eq("name", "Bob"), F::eq("name", "Alice")]))
+    repo.delete(&F::or(&[F::eq("name", "Bob"), F::eq("name", "Alice")]))
         .await
         .unwrap();
     let users = repo.get_many(&Query::new()).await.unwrap();
