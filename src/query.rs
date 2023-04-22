@@ -1,4 +1,7 @@
-#[derive(Clone)]
+use chrono::{DateTime, Utc};
+use rust_decimal::Decimal;
+
+#[derive(Clone, Debug)]
 pub enum Op {
     StrEq(String),
     StrNe(String),
@@ -14,9 +17,29 @@ pub enum Op {
     IntGte(i64),
     IntBetween(i64, i64),
     IntIn(Vec<i64>),
+    BoolEq(bool),
+    BoolNe(bool),
+    FloatEq(f64),
+    FloatNe(f64),
+    FloatLt(f64),
+    FloatGt(f64),
+    FloatLte(f64),
+    FloatGte(f64),
+    DecimalEq(Decimal),
+    DecimalNe(Decimal),
+    DecimalLt(Decimal),
+    DecimalGt(Decimal),
+    DecimalLte(Decimal),
+    DecimalGte(Decimal),
+    DateTimeEq(DateTime<Utc>),
+    DateTimeNe(DateTime<Utc>),
+    DateTimeLt(DateTime<Utc>),
+    DateTimeGt(DateTime<Utc>),
+    DateTimeLte(DateTime<Utc>),
+    DateTimeGte(DateTime<Utc>),
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub enum F {
     And(Vec<F>),
     Or(Vec<F>),
@@ -140,6 +163,125 @@ impl EndsWithArg for &str {
     }
 }
 
+impl EqArg for bool {
+    fn to_op(self) -> Op {
+        Op::BoolEq(self)
+    }
+}
+
+impl NeArg for bool {
+    fn to_op(self) -> Op {
+        Op::BoolNe(self)
+    }
+}
+
+impl EqArg for f64 {
+    fn to_op(self) -> Op {
+        Op::FloatEq(self)
+    }
+}
+
+impl NeArg for f64 {
+    fn to_op(self) -> Op {
+        Op::FloatNe(self)
+    }
+}
+
+impl LtArg for f64 {
+    fn to_op(self) -> Op {
+        Op::FloatLt(self)
+    }
+}
+
+impl GtArg for f64 {
+    fn to_op(self) -> Op {
+        Op::FloatGt(self)
+    }
+}
+
+impl GteArg for f64 {
+    fn to_op(self) -> Op {
+        Op::FloatGte(self)
+    }
+}
+
+impl LteArg for f64 {
+    fn to_op(self) -> Op {
+        Op::FloatLte(self)
+    }
+}
+
+impl EqArg for DateTime<Utc> {
+    fn to_op(self) -> Op {
+        Op::DateTimeEq(self)
+    }
+}
+
+impl NeArg for DateTime<Utc> {
+    fn to_op(self) -> Op {
+        Op::DateTimeNe(self)
+    }
+}
+
+impl LtArg for DateTime<Utc> {
+    fn to_op(self) -> Op {
+        Op::DateTimeLt(self)
+    }
+}
+
+impl GtArg for DateTime<Utc> {
+    fn to_op(self) -> Op {
+        Op::DateTimeGt(self)
+    }
+}
+
+impl LteArg for DateTime<Utc> {
+    fn to_op(self) -> Op {
+        Op::DateTimeLte(self)
+    }
+}
+
+impl GteArg for DateTime<Utc> {
+    fn to_op(self) -> Op {
+        Op::DateTimeGte(self)
+    }
+}
+
+impl EqArg for Decimal {
+    fn to_op(self) -> Op {
+        Op::DecimalEq(self)
+    }
+}
+
+impl NeArg for Decimal {
+    fn to_op(self) -> Op {
+        Op::DecimalNe(self)
+    }
+}
+
+impl LtArg for Decimal {
+    fn to_op(self) -> Op {
+        Op::DecimalLt(self)
+    }
+}
+
+impl GtArg for Decimal {
+    fn to_op(self) -> Op {
+        Op::DecimalGt(self)
+    }
+}
+
+impl LteArg for Decimal {
+    fn to_op(self) -> Op {
+        Op::DecimalLte(self)
+    }
+}
+
+impl GteArg for Decimal {
+    fn to_op(self) -> Op {
+        Op::DecimalGte(self)
+    }
+}
 impl F {
     pub fn eq(field: impl ToString, val: impl EqArg) -> Self {
         Self::Value {
@@ -231,13 +373,13 @@ impl F {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub enum Order {
     Asc(String),
     Desc(String),
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct Query {
     pub filter: Option<F>,
     pub limit: Option<usize>,

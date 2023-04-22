@@ -7,14 +7,17 @@ edition = "2021"
 
 [dependencies]
 tokio = { version = "1", features = ["full"] }
-sqlx = { version = "0.6", features = [ "runtime-tokio-rustls", "postgres", "macros" ] }
-sea-query = "0"
-sea-query-binder = { version = "0", features = [ "sqlx-postgres" ] }
+sqlx = { version = "0.6", features = [ "runtime-tokio-rustls", "postgres", "macros", "chrono" ] }
+sea-query = { version = "0", features = ["with-chrono", "with-rust_decimal"] }
+sea-query-binder = { version = "0", features = ["sqlx-postgres", "with-chrono", "with-rust_decimal"] }
 async-trait = "0.1.68"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 anyhow = "1.0.70"
+chrono = { version = "0.4.24", features = ["serde"] }
+rust_decimal = "1.29.1"
 
 [dev-dependencies]
 async_once = "0.2.6"
 lazy_static = "1.4.0"
+rust_decimal_macros = "1.29.1"

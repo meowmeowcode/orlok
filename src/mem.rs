@@ -1,8 +1,11 @@
 use std::cmp::Ordering;
+use std::str::FromStr;
 use std::marker::PhantomData;
 
 use anyhow::Result;
 use async_trait::async_trait;
+use chrono::DateTime;
+use rust_decimal::Decimal;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use tokio::sync::RwLock;
@@ -128,22 +131,128 @@ fn matches_filter(v: &Value, f: &F) -> bool {
                 Op::StrStartsWith(val) => s.starts_with(val),
                 Op::StrEndsWith(val) => s.ends_with(val),
                 Op::StrIn(val) => val.contains(s),
+                Op::DateTimeEq(val) => DateTime::parse_from_rfc3339(&s).unwrap() == *val,
+                Op::DateTimeNe(val) => DateTime::parse_from_rfc3339(&s).unwrap() != *val,
+                Op::DateTimeLt(val) => DateTime::parse_from_rfc3339(&s).unwrap() < *val,
+                Op::DateTimeGt(val) => DateTime::parse_from_rfc3339(&s).unwrap() > *val,
+                Op::DateTimeLte(val) => DateTime::parse_from_rfc3339(&s).unwrap() <= *val,
+                Op::DateTimeGte(val) => DateTime::parse_from_rfc3339(&s).unwrap() >= *val,
+                Op::DecimalEq(val) => Decimal::from_str(s).unwrap() == *val,
+                Op::DecimalNe(val) => Decimal::from_str(s).unwrap() != *val,
+                Op::DecimalLt(val) => Decimal::from_str(s).unwrap() < *val,
+                Op::DecimalGt(val) => Decimal::from_str(s).unwrap() > *val,
+                Op::DecimalLte(val) => Decimal::from_str(s).unwrap() <= *val,
+                Op::DecimalGte(val) => Decimal::from_str(s).unwrap() >= *val,
                 _ => false,
             },
             Value::Number(n) => {
-                let n = n.as_i64().unwrap();
                 match op {
-                    Op::IntEq(val) => n == *val,
-                    Op::IntNe(val) => n != *val,
-                    Op::IntLt(val) => n < *val,
-                    Op::IntGt(val) => n > *val,
-                    Op::IntLte(val) => n <= *val,
-                    Op::IntGte(val) => n >= *val,
-                    Op::IntBetween(val1, val2) => *val1 <= n && n <= *val2,
-                    Op::IntIn(val) => val.contains(&n),
-                    _ => false,
+                    Op::IntEq(val) => {
+                        if let Some(n) = n.as_i64() {
+                            n == *val
+                        } else {
+                            false
+                        }
+                    },
+                    Op::IntNe(val) => {
+                        if let Some(n) = n.as_i64() {
+                            n != *val
+                        } else {
+                            false
+                        }
+                    },
+                    Op::IntLt(val) => {
+                        if let Some(n) = n.as_i64() {
+                            n < *val
+                        } else {
+                            false
+                        }
+                    },
+                    Op::IntGt(val) => {
+                        if let Some(n) = n.as_i64() {
+                            n > *val
+                        } else {
+                            false
+                        }
+                    },
+                    Op::IntLte(val) => {
+                        if let Some(n) = n.as_i64() {
+                            n <= *val
+                        } else {
+                            false
+                        }
+                    },
+                    Op::IntGte(val) => {
+                        if let Some(n) = n.as_i64() {
+                            n >= *val
+                        } else {
+                            false
+                        }
+                    },
+                    Op::IntBetween(val1, val2) => {
+                        if let Some(n) = n.as_i64() {
+                            *val1 <= n && n <= *val2
+                        } else {
+                            false
+                        }
+                    },
+                    Op::IntIn(val) => {
+                        if let Some(n) = n.as_i64() {
+                            val.contains(&n)
+                        } else {
+                            false
+                        }
+                    },
+                    Op::FloatEq(val) => {
+                        if let Some(n) = n.as_f64() {
+                            n == *val
+                        } else {
+                            false
+                        }
+                    },
+                    Op::FloatNe(val) => {
+                        if let Some(n) = n.as_f64() {
+                            n != *val
+                        } else {
+                            false
+                        }
+                    },
+                    Op::FloatLt(val) => {
+                        if let Some(n) = n.as_f64() {
+                            n < *val
+                        } else {
+                            false
+                        }
+                    },
+                    Op::FloatGt(val) => {
+                        if let Some(n) = n.as_f64() {
+                            n > *val
+                        } else {
+                            false
+                        }
+                    },
+                    Op::FloatLte(val) => {
+                        if let Some(n) = n.as_f64() {
+                            n <= *val
+                        } else {
+                            false
+                        }
+                    },
+                    Op::FloatGte(val) => {
+                        if let Some(n) = n.as_f64() {
+                            n >= *val
+                        } else {
+                            false
+                        }
+                    },
+                    _ => false
                 }
-            }
+            },
+            Value::Bool(b) => match op {
+                Op::BoolEq(val) => b == val,
+                Op::BoolNe(val) => b != val,
+                _ => false,
+            },
             _ => false,
         },
     }
