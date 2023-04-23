@@ -1,5 +1,6 @@
 use chrono::{DateTime, Utc};
 use rust_decimal::Decimal;
+use uuid::Uuid;
 
 #[derive(Clone, Debug)]
 pub enum Op {
@@ -37,6 +38,9 @@ pub enum Op {
     DateTimeGt(DateTime<Utc>),
     DateTimeLte(DateTime<Utc>),
     DateTimeGte(DateTime<Utc>),
+    UuidEq(Uuid),
+    UuidNe(Uuid),
+    UuidIn(Vec<Uuid>),
 }
 
 #[derive(Clone, Debug)]
@@ -282,6 +286,25 @@ impl GteArg for Decimal {
         Op::DecimalGte(self)
     }
 }
+
+impl EqArg for Uuid {
+    fn to_op(self) -> Op {
+        Op::UuidEq(self)
+    }
+}
+
+impl NeArg for Uuid {
+    fn to_op(self) -> Op {
+        Op::UuidNe(self)
+    }
+}
+
+impl InArg for Vec<Uuid> {
+    fn to_op(self) -> Op {
+        Op::UuidIn(self)
+    }
+}
+
 impl F {
     pub fn eq(field: impl ToString, val: impl EqArg) -> Self {
         Self::Value {

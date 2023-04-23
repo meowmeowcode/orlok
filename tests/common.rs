@@ -10,6 +10,7 @@ use sea_query::SimpleExpr;
 use serde::{Deserialize, Serialize};
 use sqlx::postgres::PgRow;
 use sqlx::{PgPool, Row};
+use uuid::Uuid;
 
 use orlok::base::Repo;
 use orlok::mem::MemoryRepo;
@@ -17,8 +18,9 @@ use orlok::pg::PgRepo;
 
 #[derive(PartialEq, Clone, Debug, Serialize, Deserialize)]
 pub struct User {
-    pub id: i64,
+    pub id: Uuid,
     pub name: String,
+    pub age: i64,
     pub is_evil: bool,
     pub weight: Option<f64>,
     pub registered_at: DateTime<Utc>,
@@ -26,10 +28,11 @@ pub struct User {
 }
 
 impl User {
-    pub fn new(id: i64, name: &str) -> Self {
+    pub fn new(name: &str, age: i64) -> Self {
         Self {
-            id: id,
+            id: Uuid::new_v4(),
             name: name.to_string(),
+            age: age,
             is_evil: false,
             weight: None,
             money: dec!(0.0),
@@ -39,7 +42,7 @@ impl User {
 }
 
 pub async fn add_alice(repo: &Box<dyn Repo<User>>) -> User {
-    let mut u = User::new(1, "Alice");
+    let mut u = User::new("Alice", 24);
     u.money = dec!(130.50);
     u.registered_at = Utc.with_ymd_and_hms(2018, 3, 1, 0, 0, 0).unwrap();
     u.weight = Some(70.5);
@@ -48,7 +51,7 @@ pub async fn add_alice(repo: &Box<dyn Repo<User>>) -> User {
 }
 
 pub async fn add_bob(repo: &Box<dyn Repo<User>>) -> User {
-    let mut u = User::new(2, "Bob");
+    let mut u = User::new("Bob", 29);
     u.money = dec!(150.06);
     u.registered_at = Utc.with_ymd_and_hms(2019, 2, 2, 0, 0, 0).unwrap();
     u.weight = Some(83.4);
@@ -57,7 +60,7 @@ pub async fn add_bob(repo: &Box<dyn Repo<User>>) -> User {
 }
 
 pub async fn add_eve(repo: &Box<dyn Repo<User>>) -> User {
-    let mut u = User::new(3, "Eve");
+    let mut u = User::new("Eve", 31);
     u.money = dec!(230.25);
     u.registered_at = Utc.with_ymd_and_hms(2020, 1, 3, 0, 0, 0).unwrap();
     u.is_evil = true;
@@ -69,6 +72,7 @@ fn dump_user(entity: &User) -> HashMap<String, SimpleExpr> {
     HashMap::from([
         ("id".to_string(), entity.id.into()),
         ("name".to_string(), entity.name.clone().into()),
+        ("age".to_string(), entity.age.into()),
         ("is_evil".to_string(), entity.is_evil.into()),
         ("weight".to_string(), entity.weight.into()),
         ("money".to_string(), entity.money.into()),
@@ -80,6 +84,7 @@ fn load_user(row: &PgRow) -> User {
     User {
         id: row.get("id"),
         name: row.get("name"),
+        age: row.get("age"),
         is_evil: row.get("is_evil"),
         weight: row.get("weight"),
         money: row.get("money"),
@@ -92,17 +97,18 @@ async fn users_pg_repo<'a>() -> PgRepo<'a, User> {
 
     sqlx::query(
         "create table if not exists users (
-            id bigint,
+            id uuid,
             name text,
+            age bigint,
             is_evil boolean,
             weight float8,
             money decimal,
             registered_at timestamptz
-        )"
+        )",
     )
-        .execute(pool)
-        .await
-        .unwrap();
+    .execute(pool)
+    .await
+    .unwrap();
 
     sqlx::query("delete from users")
         .execute(pool)

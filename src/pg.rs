@@ -110,6 +110,9 @@ impl<'pool, T> PgRepo<'pool, T> {
                     Op::DecimalGt(val) => col.gt(*val),
                     Op::DecimalLte(val) => col.lte(*val),
                     Op::DecimalGte(val) => col.gte(*val),
+                    Op::UuidEq(val) => col.eq(*val),
+                    Op::UuidNe(val) => col.ne(*val),
+                    Op::UuidIn(values) => col.is_in(values.iter().map(|x| *x)),
                     _ => todo!(),
                 }
                 .into_condition()
