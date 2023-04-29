@@ -1,5 +1,8 @@
+use sqlx::PgExecutor;
 use std::collections::HashMap;
 use std::fmt::Write;
+use std::future::Future;
+use std::pin::Pin;
 
 use anyhow::{bail, Result};
 use async_trait::async_trait;
@@ -11,10 +14,12 @@ use sea_query::{Expr, Iden};
 use sea_query_binder::SqlxBinder;
 use sqlx::postgres::PgRow;
 use sqlx::PgPool;
+use sqlx::Postgres;
 
-use crate::base::Repo;
+use crate::base::{Repo, TxManager};
 use crate::query::{Op, Order, Query, F};
 
+#[derive(Clone)]
 pub struct PgRepo<'pool, T> {
     pool: &'pool PgPool,
     table: String,
@@ -120,21 +125,15 @@ impl<'pool, T> PgRepo<'pool, T> {
             _ => todo!(),
         }
     }
-}
 
-#[async_trait]
-impl<'pool, T> Repo<T> for PgRepo<'pool, T>
-where
-    T: Sync + Send,
-{
-    async fn get(&self, filter: &F) -> Result<Option<T>> {
+    async fn get_via(&self, executor: impl PgExecutor<'_>, filter: &F) -> Result<Option<T>> {
         let (sql, values) = {
             let mut query = (self.query)(&self.table);
             self.apply_filter(&mut query, filter);
             query.build_sqlx(PostgresQueryBuilder)
         };
 
-        let result = sqlx::query_with(&sql, values).fetch_one(self.pool).await;
+        let result = sqlx::query_with(&sql, values).fetch_one(executor).await;
 
         match result {
             Ok(row) => Ok(Some((self.load)(&row))),
@@ -143,7 +142,7 @@ where
         }
     }
 
-    async fn get_many(&self, query: &Query) -> Result<Vec<T>> {
+    async fn get_many_via(&self, executor: impl PgExecutor<'_>, query: &Query) -> Result<Vec<T>> {
         let (sql, values) = {
             let mut sql = (self.query)(&self.table);
 
@@ -174,7 +173,7 @@ where
             sql.build_sqlx(PostgresQueryBuilder)
         };
 
-        let result = sqlx::query_with(&sql, values).fetch_all(self.pool).await;
+        let result = sqlx::query_with(&sql, values).fetch_all(executor).await;
 
         match result {
             Ok(rows) => Ok(rows.iter().map(self.load).collect()),
@@ -182,7 +181,12 @@ where
         }
     }
 
-    async fn update(&self, filter: &F, entity: &T) -> Result<()> {
+    async fn update_via(
+        &self,
+        executor: impl PgExecutor<'_>,
+        filter: &F,
+        entity: &T,
+    ) -> Result<()> {
         let (sql, values) = {
             let data = (self.dump)(entity);
 
@@ -197,11 +201,11 @@ where
                 .build_sqlx(PostgresQueryBuilder)
         };
 
-        sqlx::query_with(&sql, values).execute(self.pool).await?;
+        sqlx::query_with(&sql, values).execute(executor).await?;
         Ok(())
     }
 
-    async fn delete(&self, filter: &F) -> Result<()> {
+    async fn delete_via(&self, executor: impl PgExecutor<'_>, filter: &F) -> Result<()> {
         let (sql, values) = {
             let mut sql = SeaQuery::delete()
                 .from_table(Name(self.table.clone()))
@@ -210,11 +214,11 @@ where
             sql.build_sqlx(PostgresQueryBuilder)
         };
 
-        sqlx::query_with(&sql, values).execute(self.pool).await?;
+        sqlx::query_with(&sql, values).execute(executor).await?;
         Ok(())
     }
 
-    async fn add(&self, entity: &T) -> Result<()> {
+    async fn add_via(&self, executor: impl PgExecutor<'_>, entity: &T) -> Result<()> {
         let (sql, values) = {
             let data = (self.dump)(entity);
             let keys: Vec<Name> = data.keys().map(|k| Name(k.clone())).collect();
@@ -227,7 +231,111 @@ where
                 .build_sqlx(PostgresQueryBuilder)
         };
 
-        sqlx::query_with(&sql, values).execute(self.pool).await?;
+        sqlx::query_with(&sql, values).execute(executor).await?;
         Ok(())
+    }
+}
+
+#[async_trait]
+impl<'pool, T> Repo<T> for PgRepo<'pool, T>
+where
+    T: Sync + Send,
+{
+    type Transaction = PgTransaction<'pool>;
+
+    async fn get(&self, filter: &F) -> Result<Option<T>> {
+        self.get_via(self.pool, filter).await
+    }
+
+    async fn get_many(&self, query: &Query) -> Result<Vec<T>> {
+        self.get_many_via(self.pool, query).await
+    }
+
+    async fn update(&self, filter: &F, entity: &T) -> Result<()> {
+        self.update_via(self.pool, filter, entity).await
+    }
+
+    async fn delete(&self, filter: &F) -> Result<()> {
+        self.delete_via(self.pool, filter).await
+    }
+
+    async fn add(&self, entity: &T) -> Result<()> {
+        self.add_via(self.pool, entity).await
+    }
+
+    async fn get_within(
+        &self,
+        transaction: &mut Self::Transaction,
+        filter: &F,
+    ) -> Result<Option<T>> {
+        self.get_via(&mut transaction.wrapped, filter).await
+    }
+
+    async fn get_many_within(
+        &self,
+        transaction: &mut Self::Transaction,
+        query: &Query,
+    ) -> Result<Vec<T>> {
+        self.get_many_via(&mut transaction.wrapped, query).await
+    }
+
+    async fn update_within(
+        &self,
+        transaction: &mut Self::Transaction,
+        filter: &F,
+        entity: &T,
+    ) -> Result<()> {
+        self.update_via(&mut transaction.wrapped, filter, entity)
+            .await
+    }
+
+    async fn delete_within(&self, transaction: &mut Self::Transaction, filter: &F) -> Result<()> {
+        self.delete_via(&mut transaction.wrapped, filter).await
+    }
+
+    async fn add_within(&self, transaction: &mut Self::Transaction, entity: &T) -> Result<()> {
+        self.add_via(&mut transaction.wrapped, entity).await
+    }
+}
+
+pub struct PgTransaction<'a> {
+    wrapped: sqlx::Transaction<'a, Postgres>,
+}
+
+pub struct PgTxManager<'pool> {
+    pool: &'pool PgPool,
+}
+
+impl<'pool> PgTxManager<'pool> {
+    pub fn new(pool: &'pool PgPool) -> Self {
+        Self { pool }
+    }
+}
+
+#[async_trait]
+impl<'pool> TxManager for PgTxManager<'pool> {
+    type Transaction = PgTransaction<'pool>;
+
+    async fn run<A, T>(&self, action: A) -> Result<T>
+    where
+        A: for<'a> FnOnce(
+                &'a mut Self::Transaction,
+            ) -> Pin<Box<dyn Future<Output = Result<T>> + Send + 'a>>
+            + Send,
+        T: Send,
+    {
+        let mut tx = Self::Transaction {
+            wrapped: self.pool.begin().await?,
+        };
+        match action(&mut tx).await {
+            Ok(res) => {
+                tx.wrapped.commit().await?;
+                Ok(res)
+            }
+            Err(err) => {
+                tx.wrapped.rollback().await?;
+                bail!(err)
+            }
+        }
     }
 }

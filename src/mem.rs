@@ -1,8 +1,11 @@
 use std::cmp::Ordering;
+use std::collections::HashMap;
+use std::future::Future;
 use std::marker::PhantomData;
+use std::pin::Pin;
 use std::str::FromStr;
 
-use anyhow::Result;
+use anyhow::{bail, Result};
 use async_trait::async_trait;
 use chrono::DateTime;
 use rust_decimal::Decimal;
@@ -11,24 +14,29 @@ use serde_json::Value;
 use tokio::sync::RwLock;
 use uuid::Uuid;
 
-use crate::base::Repo;
+use crate::base::{Repo, TxManager};
 use crate::query::{Op, Order, Query, F};
 
-pub struct MemoryRepo<T>
+pub type JsonData = RwLock<HashMap<String, Vec<Value>>>;
+
+#[derive(Clone)]
+pub struct MemoryRepo<'data, T>
 where
     T: Clone + Serialize + for<'de> Deserialize<'de>,
 {
-    items: RwLock<Vec<Value>>,
+    data: &'data JsonData,
+    key: String,
     phantom: PhantomData<T>,
 }
 
-impl<T> MemoryRepo<T>
+impl<'data, T> MemoryRepo<'data, T>
 where
     T: Clone + Serialize + for<'de> Deserialize<'de>,
 {
-    pub fn new() -> Self {
+    pub fn new(data: &'data JsonData, key: String) -> Self {
         Self {
-            items: RwLock::new(vec![]),
+            data,
+            key,
             phantom: PhantomData,
         }
     }
@@ -39,12 +47,15 @@ where
 }
 
 #[async_trait]
-impl<T> Repo<T> for MemoryRepo<T>
+impl<'data, T> Repo<T> for MemoryRepo<'data, T>
 where
     T: Clone + Serialize + for<'de> Deserialize<'de> + Sync + Send,
 {
+    type Transaction = MemoryTransaction;
+
     async fn get(&self, filter: &F) -> Result<Option<T>> {
-        let items = self.items.read().await;
+        let mut lock = self.data.write().await;
+        let items = lock.entry(self.key.clone()).or_insert(Vec::new());
         let item = items.iter().find(|x| matches_filter(x, filter));
 
         match item {
@@ -54,7 +65,8 @@ where
     }
 
     async fn get_many(&self, query: &Query) -> Result<Vec<T>> {
-        let items = self.items.read().await;
+        let mut lock = self.data.write().await;
+        let items = lock.entry(self.key.clone()).or_insert(Vec::new());
         let mut sorted: Vec<&Value> = Vec::new();
         let mut filtered: Box<dyn Iterator<Item = &Value>> = Box::new(items.iter());
 
@@ -83,14 +95,15 @@ where
 
     async fn add(&self, entity: &T) -> Result<()> {
         let item = serde_json::to_value(entity)?;
-
-        self.items.write().await.push(item);
-
+        let mut lock = self.data.write().await;
+        let items = lock.entry(self.key.clone()).or_insert(Vec::new());
+        items.push(item);
         Ok(())
     }
 
     async fn delete(&self, filter: &F) -> Result<()> {
-        let mut items = self.items.write().await;
+        let mut lock = self.data.write().await;
+        let items = lock.entry(self.key.clone()).or_insert(Vec::new());
 
         while let Some((index, _)) = items
             .iter()
@@ -104,7 +117,8 @@ where
     }
 
     async fn update(&self, filter: &F, entity: &T) -> Result<()> {
-        let mut items = self.items.write().await;
+        let mut lock = self.data.write().await;
+        let items = lock.entry(self.key.clone()).or_insert(Vec::new());
         let item = serde_json::to_value(entity)?;
 
         if let Some((index, _)) = items
@@ -116,6 +130,39 @@ where
         }
 
         Ok(())
+    }
+
+    async fn get_within(
+        &self,
+        _transaction: &mut Self::Transaction,
+        filter: &F,
+    ) -> Result<Option<T>> {
+        self.get(filter).await
+    }
+
+    async fn get_many_within(
+        &self,
+        _transaction: &mut Self::Transaction,
+        query: &Query,
+    ) -> Result<Vec<T>> {
+        self.get_many(query).await
+    }
+
+    async fn add_within(&self, _transaction: &mut Self::Transaction, entity: &T) -> Result<()> {
+        self.add(entity).await
+    }
+
+    async fn update_within(
+        &self,
+        _transaction: &mut Self::Transaction,
+        filter: &F,
+        entity: &T,
+    ) -> Result<()> {
+        self.update(filter, entity).await
+    }
+
+    async fn delete_within(&self, _transaction: &mut Self::Transaction, filter: &F) -> Result<()> {
+        self.delete(filter).await
     }
 }
 
@@ -306,4 +353,43 @@ fn vals_cmp(xs: &Vec<&Value>, ys: &Vec<&Value>, fields: &Vec<Order>) -> Ordering
     }
 
     Ordering::Equal
+}
+
+pub struct MemoryTransaction {}
+
+pub struct MemoryTxManager<'data> {
+    data: &'data JsonData,
+}
+
+impl<'data> MemoryTxManager<'data> {
+    pub fn new(data: &'data JsonData) -> Self {
+        Self { data }
+    }
+}
+
+#[async_trait]
+impl<'data> TxManager for MemoryTxManager<'data> {
+    type Transaction = MemoryTransaction;
+
+    async fn run<A, T>(&self, action: A) -> Result<T>
+    where
+        A: for<'a> FnOnce(
+                &'a mut Self::Transaction,
+            ) -> Pin<Box<dyn Future<Output = Result<T>> + Send + 'a>>
+            + Send,
+        T: Send,
+    {
+        let mut tx = Self::Transaction {};
+        let initial_state = self.data.read().await.clone();
+
+        match action(&mut tx).await {
+            Ok(res) => Ok(res),
+            Err(err) => {
+                let mut data = self.data.write().await;
+                data.clear();
+                data.extend(initial_state);
+                bail!(err)
+            }
+        }
+    }
 }
