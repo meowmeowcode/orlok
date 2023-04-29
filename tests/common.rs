@@ -33,7 +33,6 @@ impl User {
     }
 }
 
-#[allow(dead_code)]
 pub async fn add_alice<X>(repo: &impl Repo<User, Transaction = X>) -> User {
     let mut u = User::new("Alice", 24);
     u.money = dec!(130.50);
@@ -43,7 +42,6 @@ pub async fn add_alice<X>(repo: &impl Repo<User, Transaction = X>) -> User {
     u
 }
 
-#[allow(dead_code)]
 pub async fn add_bob<X>(repo: &impl Repo<User, Transaction = X>) -> User {
     let mut u = User::new("Bob", 29);
     u.money = dec!(150.06);
@@ -53,7 +51,6 @@ pub async fn add_bob<X>(repo: &impl Repo<User, Transaction = X>) -> User {
     u
 }
 
-#[allow(dead_code)]
 pub async fn add_eve<X>(repo: &impl Repo<User, Transaction = X>) -> User {
     let mut u = User::new("Eve", 31);
     u.money = dec!(230.25);
