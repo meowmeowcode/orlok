@@ -20,7 +20,7 @@ use crate::query::{Op, Order, Query, F};
 pub type JsonData = RwLock<HashMap<String, Vec<Value>>>;
 
 #[derive(Clone)]
-pub struct MemoryRepo<'data, T>
+pub struct JsonRepo<'data, T>
 where
     T: Clone + Serialize + for<'de> Deserialize<'de>,
 {
@@ -29,7 +29,7 @@ where
     phantom: PhantomData<T>,
 }
 
-impl<'data, T> MemoryRepo<'data, T>
+impl<'data, T> JsonRepo<'data, T>
 where
     T: Clone + Serialize + for<'de> Deserialize<'de>,
 {
@@ -47,11 +47,11 @@ where
 }
 
 #[async_trait]
-impl<'data, T> Repo<T> for MemoryRepo<'data, T>
+impl<'data, T> Repo<T> for JsonRepo<'data, T>
 where
     T: Clone + Serialize + for<'de> Deserialize<'de> + Sync + Send,
 {
-    type Transaction = MemoryTransaction;
+    type Transaction = JsonTransaction;
 
     async fn get(&self, filter: &F) -> Result<Option<T>> {
         let mut lock = self.data.write().await;
@@ -355,21 +355,21 @@ fn vals_cmp(xs: &Vec<&Value>, ys: &Vec<&Value>, fields: &Vec<Order>) -> Ordering
     Ordering::Equal
 }
 
-pub struct MemoryTransaction {}
+pub struct JsonTransaction {}
 
-pub struct MemoryTxManager<'data> {
+pub struct JsonTxManager<'data> {
     data: &'data JsonData,
 }
 
-impl<'data> MemoryTxManager<'data> {
+impl<'data> JsonTxManager<'data> {
     pub fn new(data: &'data JsonData) -> Self {
         Self { data }
     }
 }
 
 #[async_trait]
-impl<'data> TxManager for MemoryTxManager<'data> {
-    type Transaction = MemoryTransaction;
+impl<'data> TxManager for JsonTxManager<'data> {
+    type Transaction = JsonTransaction;
 
     async fn run<A, T>(&self, action: A) -> Result<T>
     where

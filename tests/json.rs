@@ -7,7 +7,7 @@ use lazy_static::lazy_static;
 use tokio::sync::RwLock;
 
 use orlok::base::{Repo, TxManager};
-use orlok::mem::{JsonData, MemoryRepo, MemoryTxManager};
+use orlok::json::{JsonData, JsonRepo, JsonTxManager};
 use orlok::query::{Order, Query, F};
 
 use common::User;
@@ -16,13 +16,13 @@ lazy_static! {
     static ref DATA: AsyncOnce<JsonData> = AsyncOnce::new(async { RwLock::new(HashMap::new()) });
 }
 
-async fn users_repo<'a>() -> MemoryRepo<'a, User> {
+async fn users_repo<'a>() -> JsonRepo<'a, User> {
     DATA.get().await.write().await.clear();
-    MemoryRepo::new(DATA.get().await, "users".to_string())
+    JsonRepo::new(DATA.get().await, "users".to_string())
 }
 
-async fn tx_manager<'a>() -> MemoryTxManager<'a> {
-    MemoryTxManager::new(DATA.get().await)
+async fn tx_manager<'a>() -> JsonTxManager<'a> {
+    JsonTxManager::new(DATA.get().await)
 }
 
 #[tokio::test]
