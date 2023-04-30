@@ -132,6 +132,14 @@ where
         Ok(())
     }
 
+    async fn get_for_update(
+        &self,
+        _transaction: &mut Self::Transaction,
+        filter: &F,
+    ) -> Result<Option<T>> {
+        self.get(filter).await
+    }
+
     async fn get_within(
         &self,
         _transaction: &mut Self::Transaction,

@@ -298,3 +298,32 @@ async fn transaction_rollback() {
     let alice = repo.get(&F::eq("name", "Alice")).await.unwrap();
     assert!(alice.is_some());
 }
+
+#[tokio::test]
+async fn get_for_update() {
+    let tx_manager = tx_manager().await;
+    let repo = users_repo().await;
+    let user = common::add_bob(&repo).await;
+    let new_name = "Robert";
+
+    tx_manager
+        .run(|tx| {
+            Box::pin({
+                let repo = repo.clone();
+                async move {
+                    let mut user = repo
+                        .get_for_update(tx, &F::eq("id", user.id))
+                        .await?
+                        .unwrap();
+                    user.name = new_name.to_string();
+                    repo.update_within(tx, &F::eq("id", user.id), &user).await?;
+                    Ok(())
+                }
+            })
+        })
+        .await
+        .unwrap();
+
+    let user = repo.get(&F::eq("id", user.id)).await.unwrap().unwrap();
+    assert_eq!(user.name, new_name);
+}

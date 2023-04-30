@@ -10,7 +10,7 @@ use sea_query::backend::PostgresQueryBuilder;
 use sea_query::{
     Condition, IntoCondition, Order as SeaOrder, Query as SeaQuery, SelectStatement, SimpleExpr,
 };
-use sea_query::{Expr, Iden};
+use sea_query::{Expr, Iden, LockType};
 use sea_query_binder::SqlxBinder;
 use sqlx::postgres::PgRow;
 use sqlx::PgPool;
@@ -126,10 +126,18 @@ impl<'pool, T> PgRepo<'pool, T> {
         }
     }
 
-    async fn get_via(&self, executor: impl PgExecutor<'_>, filter: &F) -> Result<Option<T>> {
+    async fn get_via(
+        &self,
+        executor: impl PgExecutor<'_>,
+        filter: &F,
+        for_update: bool,
+    ) -> Result<Option<T>> {
         let (sql, values) = {
             let mut query = (self.query)(&self.table);
             self.apply_filter(&mut query, filter);
+            if for_update {
+                query.lock(LockType::Update);
+            }
             query.build_sqlx(PostgresQueryBuilder)
         };
 
@@ -244,7 +252,7 @@ where
     type Transaction = PgTransaction<'pool>;
 
     async fn get(&self, filter: &F) -> Result<Option<T>> {
-        self.get_via(self.pool, filter).await
+        self.get_via(self.pool, filter, false).await
     }
 
     async fn get_many(&self, query: &Query) -> Result<Vec<T>> {
@@ -263,12 +271,20 @@ where
         self.add_via(self.pool, entity).await
     }
 
+    async fn get_for_update(
+        &self,
+        transaction: &mut Self::Transaction,
+        filter: &F,
+    ) -> Result<Option<T>> {
+        self.get_via(&mut transaction.wrapped, filter, true).await
+    }
+
     async fn get_within(
         &self,
         transaction: &mut Self::Transaction,
         filter: &F,
     ) -> Result<Option<T>> {
-        self.get_via(&mut transaction.wrapped, filter).await
+        self.get_via(&mut transaction.wrapped, filter, false).await
     }
 
     async fn get_many_within(
