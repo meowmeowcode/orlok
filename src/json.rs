@@ -137,6 +137,18 @@ where
         Ok(entity.is_some())
     }
 
+    async fn count(&self, filter: &F) -> Result<i64> {
+        let mut lock = self.data.write().await;
+        let items = lock.entry(self.key.clone()).or_insert(Vec::new());
+        Ok(items.iter().filter(|x| matches_filter(x, filter)).count() as i64)
+    }
+
+    async fn count_all(&self) -> Result<i64> {
+        let mut lock = self.data.write().await;
+        let items = lock.entry(self.key.clone()).or_insert(Vec::new());
+        Ok(items.len() as i64)
+    }
+
     async fn get_for_update(
         &self,
         _transaction: &mut Self::Transaction,
@@ -184,6 +196,14 @@ where
         filter: &F,
     ) -> Result<bool> {
         self.exists(filter).await
+    }
+
+    async fn count_within(&self, _transaction: &mut Self::Transaction, filter: &F) -> Result<i64> {
+        self.count(filter).await
+    }
+
+    async fn count_all_within(&self, _transaction: &mut Self::Transaction) -> Result<i64> {
+        self.count_all().await
     }
 }
 

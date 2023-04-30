@@ -258,6 +258,43 @@ impl<'pool, T> PgRepo<'pool, T> {
             Err(err) => bail!(err),
         }
     }
+
+    async fn count_via(&self, executor: impl PgExecutor<'_>, filter: &F) -> Result<i64> {
+        let (sql, values) = {
+            let mut inner_query = (self.query)(&self.table);
+            self.apply_filter(&mut inner_query, filter);
+            let query = SeaQuery::select()
+                .expr_as(Expr::count(Expr::asterisk()), Alias::new("result"))
+                .from_subquery(inner_query, Alias::new("q1"))
+                .to_owned();
+            query.build_sqlx(PostgresQueryBuilder)
+        };
+
+        let result = sqlx::query_with(&sql, values).fetch_one(executor).await;
+
+        match result {
+            Ok(row) => Ok(row.get("result")),
+            Err(err) => bail!(err),
+        }
+    }
+
+    async fn count_all_via(&self, executor: impl PgExecutor<'_>) -> Result<i64> {
+        let (sql, values) = {
+            let inner_query = (self.query)(&self.table);
+            let query = SeaQuery::select()
+                .expr_as(Expr::count(Expr::asterisk()), Alias::new("result"))
+                .from_subquery(inner_query, Alias::new("q1"))
+                .to_owned();
+            query.build_sqlx(PostgresQueryBuilder)
+        };
+
+        let result = sqlx::query_with(&sql, values).fetch_one(executor).await;
+
+        match result {
+            Ok(row) => Ok(row.get("result")),
+            Err(err) => bail!(err),
+        }
+    }
 }
 
 #[async_trait]
@@ -289,6 +326,14 @@ where
 
     async fn exists(&self, filter: &F) -> Result<bool> {
         self.exists_via(self.pool, filter).await
+    }
+
+    async fn count(&self, filter: &F) -> Result<i64> {
+        self.count_via(self.pool, filter).await
+    }
+
+    async fn count_all(&self) -> Result<i64> {
+        self.count_all_via(self.pool).await
     }
 
     async fn get_for_update(
@@ -335,6 +380,14 @@ where
 
     async fn exists_within(&self, transaction: &mut Self::Transaction, filter: &F) -> Result<bool> {
         self.exists_via(&mut transaction.wrapped, filter).await
+    }
+
+    async fn count_within(&self, transaction: &mut Self::Transaction, filter: &F) -> Result<i64> {
+        self.count_via(&mut transaction.wrapped, filter).await
+    }
+
+    async fn count_all_within(&self, transaction: &mut Self::Transaction) -> Result<i64> {
+        self.count_all_via(&mut transaction.wrapped).await
     }
 }
 

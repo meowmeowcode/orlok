@@ -105,6 +105,27 @@ async fn exists() {
 }
 
 #[tokio::test]
+async fn count() {
+    let repo = users_repo().await;
+    let filter = F::or(&[F::eq("name", "Bob"), F::eq("name", "Alice")]);
+    assert_eq!(repo.count(&filter).await.unwrap(), 0);
+    common::add_alice(&repo).await;
+    common::add_bob(&repo).await;
+    common::add_eve(&repo).await;
+    assert_eq!(repo.count(&filter).await.unwrap(), 2);
+}
+
+#[tokio::test]
+async fn count_all() {
+    let repo = users_repo().await;
+    assert_eq!(repo.count_all().await.unwrap(), 0);
+    common::add_alice(&repo).await;
+    common::add_bob(&repo).await;
+    common::add_eve(&repo).await;
+    assert_eq!(repo.count_all().await.unwrap(), 3);
+}
+
+#[tokio::test]
 async fn delete() {
     let repo = users_repo().await;
     common::add_alice(&repo).await;

@@ -15,6 +15,8 @@ pub trait Repo<T> {
     async fn update(&self, filter: &F, entity: &T) -> Result<()>;
     async fn delete(&self, filter: &F) -> Result<()>;
     async fn exists(&self, filter: &F) -> Result<bool>;
+    async fn count(&self, filter: &F) -> Result<i64>;
+    async fn count_all(&self) -> Result<i64>;
     async fn get_for_update(
         &self,
         transaction: &mut Self::Transaction,
@@ -39,6 +41,8 @@ pub trait Repo<T> {
     ) -> Result<()>;
     async fn delete_within(&self, transaction: &mut Self::Transaction, filter: &F) -> Result<()>;
     async fn exists_within(&self, transaction: &mut Self::Transaction, filter: &F) -> Result<bool>;
+    async fn count_within(&self, transaction: &mut Self::Transaction, filter: &F) -> Result<i64>;
+    async fn count_all_within(&self, transaction: &mut Self::Transaction) -> Result<i64>;
 }
 
 #[async_trait]
