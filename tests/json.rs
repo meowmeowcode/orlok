@@ -45,6 +45,14 @@ async fn get_none() {
 }
 
 #[tokio::test]
+async fn exists() {
+    let repo = users_repo().await;
+    assert_eq!(repo.exists(&F::eq("name", "Alice")).await.unwrap(), false);
+    common::add_alice(&repo).await;
+    assert_eq!(repo.exists(&F::eq("name", "Alice")).await.unwrap(), true);
+}
+
+#[tokio::test]
 async fn delete() {
     let repo = users_repo().await;
     common::add_alice(&repo).await;

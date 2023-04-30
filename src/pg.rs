@@ -1,4 +1,3 @@
-use sqlx::PgExecutor;
 use std::collections::HashMap;
 use std::fmt::Write;
 use std::future::Future;
@@ -7,14 +6,13 @@ use std::pin::Pin;
 use anyhow::{bail, Result};
 use async_trait::async_trait;
 use sea_query::backend::PostgresQueryBuilder;
+use sea_query::{Alias, Expr, Iden, LockType};
 use sea_query::{
     Condition, IntoCondition, Order as SeaOrder, Query as SeaQuery, SelectStatement, SimpleExpr,
 };
-use sea_query::{Expr, Iden, LockType};
 use sea_query_binder::SqlxBinder;
 use sqlx::postgres::PgRow;
-use sqlx::PgPool;
-use sqlx::Postgres;
+use sqlx::{PgExecutor, PgPool, Postgres, Row};
 
 use crate::base::{Repo, TxManager};
 use crate::query::{Op, Order, Query, F};
@@ -242,6 +240,24 @@ impl<'pool, T> PgRepo<'pool, T> {
         sqlx::query_with(&sql, values).execute(executor).await?;
         Ok(())
     }
+
+    async fn exists_via(&self, executor: impl PgExecutor<'_>, filter: &F) -> Result<bool> {
+        let (sql, values) = {
+            let mut inner_query = (self.query)(&self.table);
+            self.apply_filter(&mut inner_query, filter);
+            let query = SeaQuery::select()
+                .expr_as(Expr::exists(inner_query), Alias::new("result"))
+                .to_owned();
+            query.build_sqlx(PostgresQueryBuilder)
+        };
+
+        let result = sqlx::query_with(&sql, values).fetch_one(executor).await;
+
+        match result {
+            Ok(row) => Ok(row.get("result")),
+            Err(err) => bail!(err),
+        }
+    }
 }
 
 #[async_trait]
@@ -269,6 +285,10 @@ where
 
     async fn add(&self, entity: &T) -> Result<()> {
         self.add_via(self.pool, entity).await
+    }
+
+    async fn exists(&self, filter: &F) -> Result<bool> {
+        self.exists_via(self.pool, filter).await
     }
 
     async fn get_for_update(
@@ -311,6 +331,10 @@ where
 
     async fn add_within(&self, transaction: &mut Self::Transaction, entity: &T) -> Result<()> {
         self.add_via(&mut transaction.wrapped, entity).await
+    }
+
+    async fn exists_within(&self, transaction: &mut Self::Transaction, filter: &F) -> Result<bool> {
+        self.exists_via(&mut transaction.wrapped, filter).await
     }
 }
 

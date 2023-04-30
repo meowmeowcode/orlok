@@ -132,6 +132,11 @@ where
         Ok(())
     }
 
+    async fn exists(&self, filter: &F) -> Result<bool> {
+        let entity = self.get(filter).await?;
+        Ok(entity.is_some())
+    }
+
     async fn get_for_update(
         &self,
         _transaction: &mut Self::Transaction,
@@ -171,6 +176,14 @@ where
 
     async fn delete_within(&self, _transaction: &mut Self::Transaction, filter: &F) -> Result<()> {
         self.delete(filter).await
+    }
+
+    async fn exists_within(
+        &self,
+        _transaction: &mut Self::Transaction,
+        filter: &F,
+    ) -> Result<bool> {
+        self.exists(filter).await
     }
 }
 
