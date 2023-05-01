@@ -14,28 +14,26 @@ use serde_json::Value;
 use tokio::sync::RwLock;
 use uuid::Uuid;
 
-use crate::base::{Repo, TxManager};
+use crate::base::{Repo, Db};
 use crate::query::{Op, Order, Query, F};
 
 pub type JsonData = RwLock<HashMap<String, Vec<Value>>>;
 
 #[derive(Clone)]
-pub struct JsonRepo<'data, T>
+pub struct JsonRepo<T>
 where
     T: Clone + Serialize + for<'de> Deserialize<'de>,
 {
-    data: &'data JsonData,
     key: String,
     phantom: PhantomData<T>,
 }
 
-impl<'data, T> JsonRepo<'data, T>
+impl<T> JsonRepo<T>
 where
     T: Clone + Serialize + for<'de> Deserialize<'de>,
 {
-    pub fn new(data: &'data JsonData, key: String) -> Self {
+    pub fn new(key: String) -> Self {
         Self {
-            data,
             key,
             phantom: PhantomData,
         }
@@ -47,14 +45,14 @@ where
 }
 
 #[async_trait]
-impl<'data, T> Repo<T> for JsonRepo<'data, T>
+impl<T> Repo<T> for JsonRepo<T>
 where
     T: Clone + Serialize + for<'de> Deserialize<'de> + Sync + Send,
 {
-    type Transaction = JsonTransaction;
+    type Db<'a> = JsonDb<'a>;
 
-    async fn get(&self, filter: &F) -> Result<Option<T>> {
-        let mut lock = self.data.write().await;
+    async fn get<'a>(&self, db: &Self::Db<'a>, filter: &F) -> Result<Option<T>> {
+        let mut lock = db.data.write().await;
         let items = lock.entry(self.key.clone()).or_insert(Vec::new());
         let item = items.iter().find(|x| matches_filter(x, filter));
 
@@ -64,8 +62,8 @@ where
         }
     }
 
-    async fn get_many(&self, query: &Query) -> Result<Vec<T>> {
-        let mut lock = self.data.write().await;
+    async fn get_many<'a>(&self, db: &Self::Db<'a>, query: &Query) -> Result<Vec<T>> {
+        let mut lock = db.data.write().await;
         let items = lock.entry(self.key.clone()).or_insert(Vec::new());
         let mut sorted: Vec<&Value> = Vec::new();
         let mut filtered: Box<dyn Iterator<Item = &Value>> = Box::new(items.iter());
@@ -93,16 +91,16 @@ where
         Ok(filtered.map(|x| Self::load(x.clone())).collect())
     }
 
-    async fn add(&self, entity: &T) -> Result<()> {
+    async fn add<'a>(&self, db: &Self::Db<'a>, entity: &T) -> Result<()> {
         let item = serde_json::to_value(entity)?;
-        let mut lock = self.data.write().await;
+        let mut lock = db.data.write().await;
         let items = lock.entry(self.key.clone()).or_insert(Vec::new());
         items.push(item);
         Ok(())
     }
 
-    async fn delete(&self, filter: &F) -> Result<()> {
-        let mut lock = self.data.write().await;
+    async fn delete<'a>(&self, db: &Self::Db<'a>, filter: &F) -> Result<()> {
+        let mut lock = db.data.write().await;
         let items = lock.entry(self.key.clone()).or_insert(Vec::new());
 
         while let Some((index, _)) = items
@@ -116,8 +114,8 @@ where
         Ok(())
     }
 
-    async fn update(&self, filter: &F, entity: &T) -> Result<()> {
-        let mut lock = self.data.write().await;
+    async fn update<'a>(&self, db: &Self::Db<'a>, filter: &F, entity: &T) -> Result<()> {
+        let mut lock = db.data.write().await;
         let items = lock.entry(self.key.clone()).or_insert(Vec::new());
         let item = serde_json::to_value(entity)?;
 
@@ -132,78 +130,25 @@ where
         Ok(())
     }
 
-    async fn exists(&self, filter: &F) -> Result<bool> {
-        let entity = self.get(filter).await?;
+    async fn exists<'a>(&self, db: &Self::Db<'a>, filter: &F) -> Result<bool> {
+        let entity = self.get(db, filter).await?;
         Ok(entity.is_some())
     }
 
-    async fn count(&self, filter: &F) -> Result<i64> {
-        let mut lock = self.data.write().await;
+    async fn count<'a>(&self, db: &Self::Db<'a>, filter: &F) -> Result<i64> {
+        let mut lock = db.data.write().await;
         let items = lock.entry(self.key.clone()).or_insert(Vec::new());
         Ok(items.iter().filter(|x| matches_filter(x, filter)).count() as i64)
     }
 
-    async fn count_all(&self) -> Result<i64> {
-        let mut lock = self.data.write().await;
+    async fn count_all<'a>(&self, db: &Self::Db<'a>) -> Result<i64> {
+        let mut lock = db.data.write().await;
         let items = lock.entry(self.key.clone()).or_insert(Vec::new());
         Ok(items.len() as i64)
     }
 
-    async fn get_for_update(
-        &self,
-        _transaction: &mut Self::Transaction,
-        filter: &F,
-    ) -> Result<Option<T>> {
-        self.get(filter).await
-    }
-
-    async fn get_within(
-        &self,
-        _transaction: &mut Self::Transaction,
-        filter: &F,
-    ) -> Result<Option<T>> {
-        self.get(filter).await
-    }
-
-    async fn get_many_within(
-        &self,
-        _transaction: &mut Self::Transaction,
-        query: &Query,
-    ) -> Result<Vec<T>> {
-        self.get_many(query).await
-    }
-
-    async fn add_within(&self, _transaction: &mut Self::Transaction, entity: &T) -> Result<()> {
-        self.add(entity).await
-    }
-
-    async fn update_within(
-        &self,
-        _transaction: &mut Self::Transaction,
-        filter: &F,
-        entity: &T,
-    ) -> Result<()> {
-        self.update(filter, entity).await
-    }
-
-    async fn delete_within(&self, _transaction: &mut Self::Transaction, filter: &F) -> Result<()> {
-        self.delete(filter).await
-    }
-
-    async fn exists_within(
-        &self,
-        _transaction: &mut Self::Transaction,
-        filter: &F,
-    ) -> Result<bool> {
-        self.exists(filter).await
-    }
-
-    async fn count_within(&self, _transaction: &mut Self::Transaction, filter: &F) -> Result<i64> {
-        self.count(filter).await
-    }
-
-    async fn count_all_within(&self, _transaction: &mut Self::Transaction) -> Result<i64> {
-        self.count_all().await
+    async fn get_for_update<'a>(&self, db: &Self::Db<'a>, filter: &F) -> Result<Option<T>> {
+        self.get(db, filter).await
     }
 }
 
@@ -398,32 +343,31 @@ fn vals_cmp(xs: &Vec<&Value>, ys: &Vec<&Value>, fields: &Vec<Order>) -> Ordering
 
 pub struct JsonTransaction {}
 
-pub struct JsonTxManager<'data> {
-    data: &'data JsonData,
+pub struct JsonDb<'a> {
+    data: JsonData,
+    phantom: PhantomData<&'a ()>,
 }
 
-impl<'data> JsonTxManager<'data> {
-    pub fn new(data: &'data JsonData) -> Self {
-        Self { data }
+impl<'a> JsonDb<'a> {
+    pub fn new(data: JsonData) -> Self {
+        Self {
+            data,
+            phantom: PhantomData,
+        }
     }
 }
 
 #[async_trait]
-impl<'data> TxManager for JsonTxManager<'data> {
-    type Transaction = JsonTransaction;
-
-    async fn run<A, T>(&self, action: A) -> Result<T>
+impl Db for JsonDb<'_> {
+    async fn transaction<A, T>(&self, action: A) -> Result<T>
     where
-        A: for<'a> FnOnce(
-                &'a mut Self::Transaction,
-            ) -> Pin<Box<dyn Future<Output = Result<T>> + Send + 'a>>
-            + Send,
+        A: for<'a> FnOnce(&'a Self) -> Pin<Box<dyn Future<Output = Result<T>> + Send + 'a>> + Send,
         T: Send,
     {
-        let mut tx = Self::Transaction {};
+        //let mut tx = Self { data: self.data, phantom: PhantomData };
         let initial_state = self.data.read().await.clone();
 
-        match action(&mut tx).await {
+        match action(&self).await {
             Ok(res) => Ok(res),
             Err(err) => {
                 let mut data = self.data.write().await;

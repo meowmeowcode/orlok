@@ -2,26 +2,15 @@ mod common;
 
 use std::collections::HashMap;
 
-use async_once::AsyncOnce;
 use sea_query::SimpleExpr;
 use sqlx::postgres::PgRow;
 use sqlx::{PgPool, Row};
 
-use lazy_static::lazy_static;
-
-use orlok::base::{Repo, TxManager};
-use orlok::pg::{PgRepo, PgTxManager};
+use orlok::base::{Repo, Db};
+use orlok::pg::{PgDb, PgRepo};
 use orlok::query::{Order, Query, F};
 
 use common::User;
-
-lazy_static! {
-    static ref POOL: AsyncOnce<PgPool> = AsyncOnce::new(async {
-        PgPool::connect("postgresql://orlok:orlok@localhost/orlok")
-            .await
-            .unwrap()
-    });
-}
 
 fn dump_user(entity: &User) -> HashMap<String, SimpleExpr> {
     HashMap::from([
@@ -47,8 +36,10 @@ fn load_user(row: &PgRow) -> User {
     }
 }
 
-pub async fn users_repo<'a>() -> PgRepo<'a, User> {
-    let pool = POOL.get().await;
+pub async fn db<'a>() -> PgDb<'a> {
+    let pool = PgPool::connect("postgresql://orlok:orlok@localhost/orlok")
+        .await
+        .unwrap();
 
     sqlx::query(
         "create table if not exists users (
@@ -61,93 +52,113 @@ pub async fn users_repo<'a>() -> PgRepo<'a, User> {
             registered_at timestamptz
         )",
     )
-    .execute(pool)
+    .execute(&pool)
     .await
     .unwrap();
 
     sqlx::query("delete from users")
-        .execute(pool)
+        .execute(&pool)
         .await
         .unwrap();
 
-    PgRepo::new(pool, "users".to_string(), dump_user, load_user)
+    PgDb::new(pool)
 }
 
-pub async fn tx_manager<'a>() -> PgTxManager<'a> {
-    PgTxManager::new(POOL.get().await)
+pub async fn users_repo() -> PgRepo<User> {
+    PgRepo::new("users".to_string(), dump_user, load_user)
 }
 
 #[tokio::test]
 async fn get() {
+    let db = db().await;
     let repo = users_repo().await;
-    let alice = common::add_alice(&repo).await;
-    let bob = common::add_bob(&repo).await;
-    let result = repo.get(&F::eq("name", "Alice")).await.unwrap().unwrap();
+    let alice = common::add_alice(&db, &repo).await;
+    let bob = common::add_bob(&db, &repo).await;
+    let result = repo
+        .get(&db, &F::eq("name", "Alice"))
+        .await
+        .unwrap()
+        .unwrap();
     assert_eq!(result, alice);
-    let result = repo.get(&F::eq("id", bob.id)).await.unwrap().unwrap();
+    let result = repo.get(&db, &F::eq("id", bob.id)).await.unwrap().unwrap();
     assert_eq!(result, bob);
 }
 
 #[tokio::test]
 async fn get_none() {
+    let db = db().await;
     let repo = users_repo().await;
-    common::add_alice(&repo).await;
-    let result = repo.get(&F::eq("name", "test")).await.unwrap();
+    common::add_alice(&db, &repo).await;
+    let result = repo.get(&db, &F::eq("name", "test")).await.unwrap();
     assert!(result.is_none());
 }
 
 #[tokio::test]
 async fn exists() {
+    let db = db().await;
     let repo = users_repo().await;
-    assert_eq!(repo.exists(&F::eq("name", "Alice")).await.unwrap(), false);
-    common::add_alice(&repo).await;
-    assert_eq!(repo.exists(&F::eq("name", "Alice")).await.unwrap(), true);
+    assert_eq!(
+        repo.exists(&db, &F::eq("name", "Alice")).await.unwrap(),
+        false
+    );
+    common::add_alice(&db, &repo).await;
+    assert_eq!(
+        repo.exists(&db, &F::eq("name", "Alice")).await.unwrap(),
+        true
+    );
 }
 
 #[tokio::test]
 async fn count() {
+    let db = db().await;
     let repo = users_repo().await;
     let filter = F::or(&[F::eq("name", "Bob"), F::eq("name", "Alice")]);
-    assert_eq!(repo.count(&filter).await.unwrap(), 0);
-    common::add_alice(&repo).await;
-    common::add_bob(&repo).await;
-    common::add_eve(&repo).await;
-    assert_eq!(repo.count(&filter).await.unwrap(), 2);
+    assert_eq!(repo.count(&db, &filter).await.unwrap(), 0);
+    common::add_alice(&db, &repo).await;
+    common::add_bob(&db, &repo).await;
+    common::add_eve(&db, &repo).await;
+    assert_eq!(repo.count(&db, &filter).await.unwrap(), 2);
 }
 
 #[tokio::test]
 async fn count_all() {
+    let db = db().await;
     let repo = users_repo().await;
-    assert_eq!(repo.count_all().await.unwrap(), 0);
-    common::add_alice(&repo).await;
-    common::add_bob(&repo).await;
-    common::add_eve(&repo).await;
-    assert_eq!(repo.count_all().await.unwrap(), 3);
+    assert_eq!(repo.count_all(&db).await.unwrap(), 0);
+    common::add_alice(&db, &repo).await;
+    common::add_bob(&db, &repo).await;
+    common::add_eve(&db, &repo).await;
+    assert_eq!(repo.count_all(&db).await.unwrap(), 3);
 }
 
 #[tokio::test]
 async fn delete() {
+    let db = db().await;
     let repo = users_repo().await;
-    common::add_alice(&repo).await;
-    common::add_bob(&repo).await;
-    let eve = common::add_eve(&repo).await;
-    repo.delete(&F::or(&[F::eq("name", "Bob"), F::eq("name", "Alice")]))
+    common::add_alice(&db, &repo).await;
+    common::add_bob(&db, &repo).await;
+    let eve = common::add_eve(&db, &repo).await;
+    repo.delete(&db, &F::or(&[F::eq("name", "Bob"), F::eq("name", "Alice")]))
         .await
         .unwrap();
-    let users = repo.get_many(&Query::new()).await.unwrap();
+    let users = repo.get_many(&db, &Query::new()).await.unwrap();
     assert_eq!(users, vec![eve]);
 }
 
 #[tokio::test]
 async fn update() {
+    let db = db().await;
     let repo = users_repo().await;
-    let alice = common::add_alice(&repo).await;
-    let mut bob = common::add_bob(&repo).await;
-    let eve = common::add_eve(&repo).await;
+    let alice = common::add_alice(&db, &repo).await;
+    let mut bob = common::add_bob(&db, &repo).await;
+    let eve = common::add_eve(&db, &repo).await;
     bob.name = "Robert".to_string();
-    repo.update(&F::eq("id", bob.id), &bob).await.unwrap();
+    repo.update(&db, &F::eq("id", bob.id), &bob).await.unwrap();
     let users = repo
-        .get_many(&Query::new().order(vec![Order::Asc("name".to_string())]))
+        .get_many(
+            &db,
+            &Query::new().order(vec![Order::Asc("name".to_string())]),
+        )
         .await
         .unwrap();
     assert_eq!(users, vec![alice, eve, bob]);
@@ -155,10 +166,11 @@ async fn update() {
 
 #[tokio::test]
 async fn get_many() {
+    let db = db().await;
     let repo = users_repo().await;
-    let alice = common::add_alice(&repo).await;
-    let bob = common::add_bob(&repo).await;
-    let eve = common::add_eve(&repo).await;
+    let alice = common::add_alice(&db, &repo).await;
+    let bob = common::add_bob(&db, &repo).await;
+    let eve = common::add_eve(&db, &repo).await;
 
     let cases = [
         // and, or:
@@ -276,7 +288,7 @@ async fn get_many() {
     ];
 
     for (query, expected_result) in cases {
-        let users = repo.get_many(&query).await.unwrap();
+        let users = repo.get_many(&db, &query).await.unwrap();
         let result: Vec<&User> = users.iter().collect();
         assert_eq!(result, expected_result, "filter {:?} doesn't work", query);
     }
@@ -284,39 +296,38 @@ async fn get_many() {
 
 #[tokio::test]
 async fn transaction() {
-    let tx_manager = tx_manager().await;
+    let db = db().await;
     let repo = users_repo().await;
-    common::add_bob(&repo).await;
+    common::add_bob(&db, &repo).await;
 
-    tx_manager
-        .run(|tx| {
-            Box::pin({
-                let repo = repo.clone();
-                async move {
-                    repo.delete_within(tx, &F::eq("name", "Bob")).await?;
-                    Ok(())
-                }
-            })
+    db.transaction(|tx| {
+        Box::pin({
+            let repo = repo.clone();
+            async move {
+                repo.delete(tx, &F::eq("name", "Bob")).await?;
+                Ok(())
+            }
         })
-        .await
-        .unwrap();
+    })
+    .await
+    .unwrap();
 
-    let bob = repo.get(&F::eq("name", "Bob")).await.unwrap();
+    let bob = repo.get(&db, &F::eq("name", "Bob")).await.unwrap();
     assert!(bob.is_none());
 }
 
 #[tokio::test]
 async fn transaction_rollback() {
-    let tx_manager = tx_manager().await;
+    let db = db().await;
     let repo = users_repo().await;
-    common::add_alice(&repo).await;
+    common::add_alice(&db, &repo).await;
 
-    let result = tx_manager
-        .run::<_, anyhow::Error>(|tx| {
+    let result = db
+        .transaction::<_, anyhow::Error>(|tx| {
             Box::pin({
                 let repo = repo.clone();
                 async move {
-                    repo.delete_within(tx, &F::eq("name", "Alice")).await?;
+                    repo.delete(tx, &F::eq("name", "Alice")).await?;
                     anyhow::bail!("failed transaction")
                 }
             })
@@ -324,35 +335,34 @@ async fn transaction_rollback() {
         .await;
 
     assert!(result.is_err());
-    let alice = repo.get(&F::eq("name", "Alice")).await.unwrap();
+    let alice = repo.get(&db, &F::eq("name", "Alice")).await.unwrap();
     assert!(alice.is_some());
 }
 
 #[tokio::test]
 async fn get_for_update() {
-    let tx_manager = tx_manager().await;
+    let db = db().await;
     let repo = users_repo().await;
-    let user = common::add_bob(&repo).await;
+    let user = common::add_bob(&db, &repo).await;
     let new_name = "Robert";
 
-    tx_manager
-        .run(|tx| {
-            Box::pin({
-                let repo = repo.clone();
-                async move {
-                    let mut user = repo
-                        .get_for_update(tx, &F::eq("id", user.id))
-                        .await?
-                        .unwrap();
-                    user.name = new_name.to_string();
-                    repo.update_within(tx, &F::eq("id", user.id), &user).await?;
-                    Ok(())
-                }
-            })
+    db.transaction(|tx| {
+        Box::pin({
+            let repo = repo.clone();
+            async move {
+                let mut user = repo
+                    .get_for_update(tx, &F::eq("id", user.id))
+                    .await?
+                    .unwrap();
+                user.name = new_name.to_string();
+                repo.update(tx, &F::eq("id", user.id), &user).await?;
+                Ok(())
+            }
         })
-        .await
-        .unwrap();
+    })
+    .await
+    .unwrap();
 
-    let user = repo.get(&F::eq("id", user.id)).await.unwrap().unwrap();
+    let user = repo.get(&db, &F::eq("id", user.id)).await.unwrap().unwrap();
     assert_eq!(user.name, new_name);
 }

@@ -13,13 +13,13 @@ use sea_query::{
 use sea_query_binder::SqlxBinder;
 use sqlx::postgres::PgRow;
 use sqlx::{PgExecutor, PgPool, Postgres, Row};
+use tokio::sync::RwLock;
 
-use crate::base::{Repo, TxManager};
+use crate::base::{Repo, Db};
 use crate::query::{Op, Order, Query, F};
 
 #[derive(Clone)]
-pub struct PgRepo<'pool, T> {
-    pool: &'pool PgPool,
+pub struct PgRepo<T> {
     table: String,
     query: fn(table: &String) -> SelectStatement,
     dump: fn(entity: &T) -> HashMap<String, SimpleExpr>,
@@ -41,15 +41,13 @@ fn default_query(table: &String) -> SelectStatement {
         .to_owned()
 }
 
-impl<'pool, T> PgRepo<'pool, T> {
+impl<T> PgRepo<T> {
     pub fn new(
-        pool: &'pool PgPool,
         table: String,
         dump: fn(entity: &T) -> HashMap<String, SimpleExpr>,
         load: fn(row: &PgRow) -> T,
     ) -> Self {
         Self {
-            pool,
             table,
             dump,
             load,
@@ -298,135 +296,139 @@ impl<'pool, T> PgRepo<'pool, T> {
 }
 
 #[async_trait]
-impl<'pool, T> Repo<T> for PgRepo<'pool, T>
+impl<T> Repo<T> for PgRepo<T>
 where
     T: Sync + Send,
 {
-    type Transaction = PgTransaction<'pool>;
+    type Db<'a> = PgDb<'a>;
 
-    async fn get(&self, filter: &F) -> Result<Option<T>> {
-        self.get_via(self.pool, filter, false).await
+    async fn get<'a>(&self, db: &Self::Db<'a>, filter: &F) -> Result<Option<T>> {
+        match db {
+            PgDb::Pool(p) => self.get_via(p, filter, false).await,
+            PgDb::Transaction(t) => {
+                let mut t = t.write().await;
+                self.get_via(&mut *t, filter, false).await
+            }
+        }
     }
 
-    async fn get_many(&self, query: &Query) -> Result<Vec<T>> {
-        self.get_many_via(self.pool, query).await
+    async fn get_many<'a>(&self, db: &Self::Db<'a>, query: &Query) -> Result<Vec<T>> {
+        match db {
+            PgDb::Pool(p) => self.get_many_via(p, query).await,
+            PgDb::Transaction(t) => {
+                let mut t = t.write().await;
+                self.get_many_via(&mut *t, query).await
+            }
+        }
     }
 
-    async fn update(&self, filter: &F, entity: &T) -> Result<()> {
-        self.update_via(self.pool, filter, entity).await
+    async fn update<'a>(&self, db: &Self::Db<'a>, filter: &F, entity: &T) -> Result<()> {
+        match db {
+            PgDb::Pool(p) => self.update_via(p, filter, entity).await,
+            PgDb::Transaction(t) => {
+                let mut t = t.write().await;
+                self.update_via(&mut *t, filter, entity).await
+            }
+        }
     }
 
-    async fn delete(&self, filter: &F) -> Result<()> {
-        self.delete_via(self.pool, filter).await
+    async fn delete<'a>(&self, db: &Self::Db<'a>, filter: &F) -> Result<()> {
+        match db {
+            PgDb::Pool(p) => self.delete_via(p, filter).await,
+            PgDb::Transaction(t) => {
+                let mut t = t.write().await;
+                self.delete_via(&mut *t, filter).await
+            }
+        }
     }
 
-    async fn add(&self, entity: &T) -> Result<()> {
-        self.add_via(self.pool, entity).await
+    async fn add<'a>(&self, db: &Self::Db<'a>, entity: &T) -> Result<()> {
+        match db {
+            PgDb::Pool(p) => self.add_via(p, entity).await,
+            PgDb::Transaction(t) => {
+                let mut t = t.write().await;
+                self.add_via(&mut *t, entity).await
+            }
+        }
     }
 
-    async fn exists(&self, filter: &F) -> Result<bool> {
-        self.exists_via(self.pool, filter).await
+    async fn exists<'a>(&self, db: &Self::Db<'a>, filter: &F) -> Result<bool> {
+        match db {
+            PgDb::Pool(p) => self.exists_via(p, filter).await,
+            PgDb::Transaction(t) => {
+                let mut t = t.write().await;
+                self.exists_via(&mut *t, filter).await
+            }
+        }
     }
 
-    async fn count(&self, filter: &F) -> Result<i64> {
-        self.count_via(self.pool, filter).await
+    async fn count<'a>(&self, db: &Self::Db<'a>, filter: &F) -> Result<i64> {
+        match db {
+            PgDb::Pool(p) => self.count_via(p, filter).await,
+            PgDb::Transaction(t) => {
+                let mut t = t.write().await;
+                self.count_via(&mut *t, filter).await
+            }
+        }
     }
 
-    async fn count_all(&self) -> Result<i64> {
-        self.count_all_via(self.pool).await
+    async fn count_all<'a>(&self, db: &Self::Db<'a>) -> Result<i64> {
+        match db {
+            PgDb::Pool(p) => self.count_all_via(p).await,
+            PgDb::Transaction(t) => {
+                let mut t = t.write().await;
+                self.count_all_via(&mut *t).await
+            }
+        }
     }
 
-    async fn get_for_update(
-        &self,
-        transaction: &mut Self::Transaction,
-        filter: &F,
-    ) -> Result<Option<T>> {
-        self.get_via(&mut transaction.wrapped, filter, true).await
-    }
-
-    async fn get_within(
-        &self,
-        transaction: &mut Self::Transaction,
-        filter: &F,
-    ) -> Result<Option<T>> {
-        self.get_via(&mut transaction.wrapped, filter, false).await
-    }
-
-    async fn get_many_within(
-        &self,
-        transaction: &mut Self::Transaction,
-        query: &Query,
-    ) -> Result<Vec<T>> {
-        self.get_many_via(&mut transaction.wrapped, query).await
-    }
-
-    async fn update_within(
-        &self,
-        transaction: &mut Self::Transaction,
-        filter: &F,
-        entity: &T,
-    ) -> Result<()> {
-        self.update_via(&mut transaction.wrapped, filter, entity)
-            .await
-    }
-
-    async fn delete_within(&self, transaction: &mut Self::Transaction, filter: &F) -> Result<()> {
-        self.delete_via(&mut transaction.wrapped, filter).await
-    }
-
-    async fn add_within(&self, transaction: &mut Self::Transaction, entity: &T) -> Result<()> {
-        self.add_via(&mut transaction.wrapped, entity).await
-    }
-
-    async fn exists_within(&self, transaction: &mut Self::Transaction, filter: &F) -> Result<bool> {
-        self.exists_via(&mut transaction.wrapped, filter).await
-    }
-
-    async fn count_within(&self, transaction: &mut Self::Transaction, filter: &F) -> Result<i64> {
-        self.count_via(&mut transaction.wrapped, filter).await
-    }
-
-    async fn count_all_within(&self, transaction: &mut Self::Transaction) -> Result<i64> {
-        self.count_all_via(&mut transaction.wrapped).await
+    async fn get_for_update<'a>(&self, db: &Self::Db<'a>, filter: &F) -> Result<Option<T>> {
+        match db {
+            PgDb::Pool(p) => self.get_via(p, filter, true).await,
+            PgDb::Transaction(t) => {
+                let mut t = t.write().await;
+                self.get_via(&mut *t, filter, true).await
+            }
+        }
     }
 }
 
-pub struct PgTransaction<'a> {
-    wrapped: sqlx::Transaction<'a, Postgres>,
+pub enum PgDb<'a> {
+    Pool(PgPool),
+    Transaction(RwLock<sqlx::Transaction<'a, Postgres>>),
 }
 
-pub struct PgTxManager<'pool> {
-    pool: &'pool PgPool,
-}
-
-impl<'pool> PgTxManager<'pool> {
-    pub fn new(pool: &'pool PgPool) -> Self {
-        Self { pool }
+impl PgDb<'_> {
+    pub fn new(pool: PgPool) -> Self {
+        Self::Pool(pool)
     }
 }
 
 #[async_trait]
-impl<'pool> TxManager for PgTxManager<'pool> {
-    type Transaction = PgTransaction<'pool>;
-
-    async fn run<A, T>(&self, action: A) -> Result<T>
+impl Db for PgDb<'_> {
+    async fn transaction<A, T>(&self, action: A) -> Result<T>
     where
-        A: for<'a> FnOnce(
-                &'a mut Self::Transaction,
-            ) -> Pin<Box<dyn Future<Output = Result<T>> + Send + 'a>>
-            + Send,
+        A: for<'a> FnOnce(&'a Self) -> Pin<Box<dyn Future<Output = Result<T>> + Send + 'a>> + Send,
         T: Send,
     {
-        let mut tx = Self::Transaction {
-            wrapped: self.pool.begin().await?,
-        };
-        match action(&mut tx).await {
+        let wrapped = RwLock::new(match self {
+            Self::Transaction(_) => todo!(),
+            Self::Pool(p) => p.begin().await?,
+        });
+
+        let tx = Self::Transaction(wrapped);
+
+        match action(&tx).await {
             Ok(res) => {
-                tx.wrapped.commit().await?;
+                if let Self::Transaction(t) = tx {
+                    t.into_inner().commit().await?;
+                }
                 Ok(res)
             }
             Err(err) => {
-                tx.wrapped.rollback().await?;
+                if let Self::Transaction(t) = tx {
+                    t.into_inner().rollback().await?;
+                }
                 bail!(err)
             }
         }

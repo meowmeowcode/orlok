@@ -33,29 +33,29 @@ impl User {
     }
 }
 
-pub async fn add_alice<X>(repo: &impl Repo<User, Transaction = X>) -> User {
+pub async fn add_alice<'a, Db>(db: &Db, repo: &impl for<'b> Repo<User, Db<'a> = Db>) -> User {
     let mut u = User::new("Alice", 24);
     u.money = dec!(130.50);
     u.registered_at = Utc.with_ymd_and_hms(2018, 3, 1, 0, 0, 0).unwrap();
     u.weight = Some(70.5);
-    repo.add(&u).await.unwrap();
+    repo.add(db, &u).await.unwrap();
     u
 }
 
-pub async fn add_bob<X>(repo: &impl Repo<User, Transaction = X>) -> User {
+pub async fn add_bob<'a, Db>(db: &Db, repo: &impl for<'b> Repo<User, Db<'a> = Db>) -> User {
     let mut u = User::new("Bob", 29);
     u.money = dec!(150.06);
     u.registered_at = Utc.with_ymd_and_hms(2019, 2, 2, 0, 0, 0).unwrap();
     u.weight = Some(83.4);
-    repo.add(&u).await.unwrap();
+    repo.add(db, &u).await.unwrap();
     u
 }
 
-pub async fn add_eve<X>(repo: &impl Repo<User, Transaction = X>) -> User {
+pub async fn add_eve<'a, Db>(db: &Db, repo: &impl for<'b> Repo<User, Db<'a> = Db>) -> User {
     let mut u = User::new("Eve", 31);
     u.money = dec!(230.25);
     u.registered_at = Utc.with_ymd_and_hms(2020, 1, 3, 0, 0, 0).unwrap();
     u.is_evil = true;
-    repo.add(&u).await.unwrap();
+    repo.add(db, &u).await.unwrap();
     u
 }
