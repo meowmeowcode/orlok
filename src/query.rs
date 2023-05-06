@@ -429,17 +429,17 @@ impl Query {
         }
     }
 
-    pub fn limit(&mut self, limit: usize) -> &Self {
+    pub fn limit(mut self, limit: usize) -> Self {
         self.limit = Some(limit);
         self
     }
 
-    pub fn offset(&mut self, offset: usize) -> &Self {
+    pub fn offset(mut self, offset: usize) -> Self {
         self.offset = Some(offset);
         self
     }
 
-    pub fn order(&mut self, order: Vec<Order>) -> &Self {
+    pub fn order(mut self, order: Vec<Order>) -> Self {
         self.order = Some(order);
         self
     }

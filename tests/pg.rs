@@ -6,7 +6,7 @@ use sea_query::SimpleExpr;
 use sqlx::postgres::PgRow;
 use sqlx::{PgPool, Row};
 
-use orlok::base::{Repo, Db};
+use orlok::base::{Db, Repo};
 use orlok::pg::{PgDb, PgRepo};
 use orlok::query::{Order, Query, F};
 
@@ -42,7 +42,7 @@ pub async fn db<'a>() -> PgDb<'a> {
         .unwrap();
 
     sqlx::query(
-        "create table if not exists users (
+        "create table if not exists test_users (
             id uuid,
             name text,
             age bigint,
@@ -56,7 +56,7 @@ pub async fn db<'a>() -> PgDb<'a> {
     .await
     .unwrap();
 
-    sqlx::query("delete from users")
+    sqlx::query("delete from test_users")
         .execute(&pool)
         .await
         .unwrap();
@@ -65,7 +65,7 @@ pub async fn db<'a>() -> PgDb<'a> {
 }
 
 pub async fn users_repo() -> PgRepo<User> {
-    PgRepo::new("users".to_string(), dump_user, load_user)
+    PgRepo::new("test_users".to_string(), dump_user, load_user)
 }
 
 #[tokio::test]

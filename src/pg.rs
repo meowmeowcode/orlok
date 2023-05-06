@@ -15,7 +15,7 @@ use sqlx::postgres::PgRow;
 use sqlx::{PgExecutor, PgPool, Postgres, Row};
 use tokio::sync::RwLock;
 
-use crate::base::{Repo, Db};
+use crate::base::{Db, Repo};
 use crate::query::{Op, Order, Query, F};
 
 #[derive(Clone)]

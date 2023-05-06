@@ -14,7 +14,7 @@ use serde_json::Value;
 use tokio::sync::RwLock;
 use uuid::Uuid;
 
-use crate::base::{Repo, Db};
+use crate::base::{Db, Repo};
 use crate::query::{Op, Order, Query, F};
 
 pub type JsonData = RwLock<HashMap<String, Vec<Value>>>;
@@ -364,7 +364,6 @@ impl Db for JsonDb<'_> {
         A: for<'a> FnOnce(&'a Self) -> Pin<Box<dyn Future<Output = Result<T>> + Send + 'a>> + Send,
         T: Send,
     {
-        //let mut tx = Self { data: self.data, phantom: PhantomData };
         let initial_state = self.data.read().await.clone();
 
         match action(&self).await {

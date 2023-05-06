@@ -4,7 +4,7 @@ use std::collections::HashMap;
 
 use tokio::sync::RwLock;
 
-use orlok::base::{Repo, Db};
+use orlok::base::{Db, Repo};
 use orlok::json::{JsonDb, JsonRepo};
 use orlok::query::{Order, Query, F};
 
