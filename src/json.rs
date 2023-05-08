@@ -17,8 +17,6 @@ use uuid::Uuid;
 use crate::base::{Db, Repo};
 use crate::query::{Op, Order, Query, F};
 
-pub type JsonData = RwLock<HashMap<String, Vec<Value>>>;
-
 #[derive(Clone)]
 pub struct JsonRepo<T>
 where
@@ -344,14 +342,14 @@ fn vals_cmp(xs: &Vec<&Value>, ys: &Vec<&Value>, fields: &Vec<Order>) -> Ordering
 pub struct JsonTransaction {}
 
 pub struct JsonDb<'a> {
-    data: JsonData,
+    data: RwLock<HashMap<String, Vec<Value>>>,
     phantom: PhantomData<&'a ()>,
 }
 
 impl<'a> JsonDb<'a> {
-    pub fn new(data: JsonData) -> Self {
+    pub fn new() -> Self {
         Self {
-            data,
+            data: RwLock::new(HashMap::new()),
             phantom: PhantomData,
         }
     }

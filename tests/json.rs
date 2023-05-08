@@ -1,9 +1,5 @@
 mod common;
 
-use std::collections::HashMap;
-
-use tokio::sync::RwLock;
-
 use orlok::base::{Db, Repo};
 use orlok::json::{JsonDb, JsonRepo};
 use orlok::query::{Order, F, Q};
@@ -15,8 +11,7 @@ async fn users_repo() -> JsonRepo<User> {
 }
 
 async fn db<'a>() -> JsonDb<'a> {
-    let data = RwLock::new(HashMap::new());
-    JsonDb::new(data)
+    JsonDb::new()
 }
 
 #[tokio::test]

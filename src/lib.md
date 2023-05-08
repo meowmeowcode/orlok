@@ -1238,10 +1238,8 @@ that stores records in memory as a collection of JSON objects.
 # use tokio_test;
 # fn main() -> anyhow::Result<()> {
     # tokio_test::block_on(async {
-use std::collections::HashMap;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
-use tokio::sync::RwLock;
 use orlok::{Repo, Db};
 use orlok::json::{JsonRepo, JsonDb};
 
@@ -1263,10 +1261,7 @@ impl User {
 }
 
 let users_repo = JsonRepo::new("users".to_string());
-
-let data = RwLock::new(HashMap::new());
-let db = JsonDb::new(data);
-
+let db = JsonDb::new();
 let user = User::new("Alice".to_string());
 users_repo.add(&db, &user).await?;
 Ok(())
