@@ -7,4 +7,4 @@ pub mod query;
 #[doc(inline)]
 pub use self::base::{Db, Repo};
 #[doc(inline)]
-pub use self::query::{F, Order, Query};
+pub use self::query::{Filter, Order, Query, F, Q};

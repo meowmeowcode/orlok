@@ -44,12 +44,14 @@ pub enum Op {
 }
 
 #[derive(Clone, Debug)]
-pub enum F {
+pub enum Filter {
     And(Vec<F>),
     Or(Vec<F>),
     IsNone(String),
     Value { field: String, op: Op },
 }
+
+pub type F = Filter;
 
 pub trait EqArg {
     fn to_op(self) -> Op;
@@ -143,27 +145,27 @@ impl InArg for Vec<i64> {
     }
 }
 
-impl EqArg for &str {
+impl EqArg for String {
     fn to_op(self) -> Op {
-        Op::StrEq(self.to_string())
+        Op::StrEq(self)
     }
 }
 
-impl ContainsArg for &str {
+impl ContainsArg for String {
     fn to_op(self) -> Op {
-        Op::StrContains(self.to_string())
+        Op::StrContains(self)
     }
 }
 
-impl StartsWithArg for &str {
+impl StartsWithArg for String {
     fn to_op(self) -> Op {
-        Op::StrStartsWith(self.to_string())
+        Op::StrStartsWith(self)
     }
 }
 
-impl EndsWithArg for &str {
+impl EndsWithArg for String {
     fn to_op(self) -> Op {
-        Op::StrEndsWith(self.to_string())
+        Op::StrEndsWith(self)
     }
 }
 
@@ -305,94 +307,94 @@ impl InArg for Vec<Uuid> {
     }
 }
 
-impl F {
-    pub fn eq(field: impl ToString, val: impl EqArg) -> Self {
+impl Filter {
+    pub fn eq(field: String, val: impl EqArg) -> Self {
         Self::Value {
-            field: field.to_string(),
+            field: field,
             op: val.to_op(),
         }
     }
 
-    pub fn is_none(field: impl ToString) -> Self {
-        Self::IsNone(field.to_string())
+    pub fn is_none(field: String) -> Self {
+        Self::IsNone(field)
     }
 
-    pub fn ne(field: impl ToString, val: impl NeArg) -> Self {
+    pub fn ne(field: String, val: impl NeArg) -> Self {
         Self::Value {
-            field: field.to_string(),
+            field: field,
             op: val.to_op(),
         }
     }
 
-    pub fn lt(field: impl ToString, val: impl LtArg) -> Self {
+    pub fn lt(field: String, val: impl LtArg) -> Self {
         Self::Value {
-            field: field.to_string(),
+            field: field,
             op: val.to_op(),
         }
     }
 
-    pub fn gt(field: impl ToString, val: impl GtArg) -> Self {
+    pub fn gt(field: String, val: impl GtArg) -> Self {
         Self::Value {
-            field: field.to_string(),
+            field: field,
             op: val.to_op(),
         }
     }
 
-    pub fn lte(field: impl ToString, val: impl LteArg) -> Self {
+    pub fn lte(field: String, val: impl LteArg) -> Self {
         Self::Value {
-            field: field.to_string(),
+            field: field,
             op: val.to_op(),
         }
     }
 
-    pub fn gte(field: impl ToString, val: impl GteArg) -> Self {
+    pub fn gte(field: String, val: impl GteArg) -> Self {
         Self::Value {
-            field: field.to_string(),
+            field: field,
             op: val.to_op(),
         }
     }
 
-    pub fn between(field: impl ToString, val: impl BetweenArg) -> Self {
+    pub fn between(field: String, val: impl BetweenArg) -> Self {
         Self::Value {
-            field: field.to_string(),
+            field: field,
             op: val.to_op(),
         }
     }
 
-    pub fn in_(field: impl ToString, val: impl InArg) -> Self {
+    pub fn in_(field: String, val: impl InArg) -> Self {
         Self::Value {
-            field: field.to_string(),
+            field: field,
             op: val.to_op(),
         }
     }
 
-    pub fn contains(field: impl ToString, val: impl ContainsArg) -> Self {
+    pub fn contains(field: String, val: impl ContainsArg) -> Self {
         Self::Value {
-            field: field.to_string(),
+            field: field,
             op: val.to_op(),
         }
     }
 
-    pub fn starts_with(field: impl ToString, val: impl StartsWithArg) -> Self {
+    pub fn starts_with(field: String, val: impl StartsWithArg) -> Self {
         Self::Value {
-            field: field.to_string(),
+            field: field,
             op: val.to_op(),
         }
     }
 
-    pub fn ends_with(field: impl ToString, val: impl EndsWithArg) -> Self {
+    pub fn ends_with(field: String, val: impl EndsWithArg) -> Self {
         Self::Value {
-            field: field.to_string(),
+            field: field,
             op: val.to_op(),
         }
     }
 
-    pub fn and(filters: &[F]) -> Self {
-        Self::And(filters.to_vec())
+    pub fn and(filters: Vec<F>) -> Self {
+        Self::And(filters)
     }
 
-    pub fn or(filters: &[F]) -> Self {
-        Self::Or(filters.to_vec())
+    pub fn or(filters: Vec<F>) -> Self {
+        Self::Or(filters)
     }
 }
 
@@ -409,6 +411,8 @@ pub struct Query {
     pub offset: Option<usize>,
     pub order: Option<Vec<Order>>,
 }
+
+pub type Q = Query;
 
 impl Query {
     pub fn new() -> Self {

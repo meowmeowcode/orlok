@@ -1,5 +1,5 @@
 <div style="text-align: center">
-    <img src="https://github.com/meowmeowcode/orlok/raw/docs/orlok.png" width="200" alt="Orlok" />
+    <img src="https://github.com/meowmeowcode/orlok/raw/main/orlok.png" width="200" alt="Orlok" />
 </div>
 
 # Orlok
@@ -381,7 +381,11 @@ Use the `get` method if you want to load only one entity from the database:
 # 
 use orlok::F;
 
-let user = users_repo.get(&db, &F::eq("name", "Alice")).await?.unwrap();
+let user = users_repo.get(
+    &db,
+    &F::eq("name".to_string(), "Alice".to_string())
+).await?.unwrap();
+
 assert_eq!(user, alice);
 #         Ok(())
 #     })
@@ -476,7 +480,11 @@ The result of this method contains an `Option` which is `None` if no record was 
 # 
 # 
 #         use orlok::F;
-let user = users_repo.get(&db, &F::eq("name", "Mikhail")).await?;
+let user = users_repo.get(
+    &db,
+    &F::eq("name".to_string(), "Mikhail".to_string())
+).await?;
+
 assert!(user.is_none());
 #         Ok(())
 #     })
@@ -574,7 +582,11 @@ the letter "o" in their name, we can do something like this:
 # 
 # 
 #         use orlok::F;
-let user = users_repo.get(&db, &F::contains("name", "o")).await?.unwrap();
+let user = users_repo.get(
+    &db,
+    &F::contains("name".to_string(), "o".to_string())
+).await?.unwrap();
+
 assert_eq!(user, bob);
 #         Ok(())
 #     })
@@ -672,9 +684,9 @@ Multiple filters can be combined this way:
 let user = users_repo.get(
     &db,
     &F::and(
-        &[
-            F::starts_with("name", "E"),
-            F::ends_with("name", "e")
+        vec![
+            F::starts_with("name".to_string(), "E".to_string()),
+            F::ends_with("name".to_string(), "e".to_string())
         ]
     )
 ).await?.unwrap();
@@ -777,7 +789,10 @@ If you need to load several entities, use the `get_many` method:
 #         use orlok::F;
 use orlok::Query;
 
-let users = users_repo.get_many(&db, &Query::filter(F::ends_with("name", "e"))).await?;
+let users = users_repo.get_many(
+    &db,
+    &Query::filter(F::ends_with("name".to_string(), "e".to_string()))
+).await?;
 assert_eq!(users, vec![alice.clone(), eve.clone()]);
 #         Ok(())
 #     })
@@ -982,9 +997,14 @@ an appropriate record in the database:
 # 
 # 
 #         use orlok::F;
-let mut eve = users_repo.get(&db, &F::eq("name", "Eve")).await?.unwrap();
+let mut eve = users_repo.get(
+    &db,
+    &F::eq("name".to_string(), "Eve".to_string())
+).await?.unwrap();
+
 eve.is_active = false;
-users_repo.update(&db, &F::eq("id", eve.id), &eve).await?;
+
+users_repo.update(&db, &F::eq("id".to_string(), eve.id), &eve).await?;
 #         Ok(())
 #     })
 # }
@@ -1080,10 +1100,10 @@ For this we also need a filter:
 # 
 # 
 #         use orlok::F;
-#         let mut eve = users_repo.get(&db, &F::eq("name", "Eve")).await?.unwrap();
+#         let mut eve = users_repo.get(&db, &F::eq("name".to_string(), "Eve".to_string())).await?.unwrap();
 #         eve.is_active = false;
-#         users_repo.update(&db, &F::eq("id", eve.id), &eve).await?;
-users_repo.delete(&db, &F::eq("is_active", false)).await?;
+#         users_repo.update(&db, &F::eq("id".to_string(), eve.id), &eve).await?;
+users_repo.delete(&db, &F::eq("is_active".to_string(), false)).await?;
 #         Ok(())
 #     })
 # }
@@ -1183,12 +1203,18 @@ db.transaction(|tx| {
     Box::pin({
         let users_repo = users_repo.clone();
         async move {
-            let mut user1 = users_repo.get_for_update(&tx, &F::eq("name", "Alice")).await?.unwrap();
-            let mut user2 = users_repo.get_for_update(&tx, &F::eq("name", "Bob")).await?.unwrap();
+            let mut user1 = users_repo.get_for_update(
+                &tx,
+                &F::eq("name".to_string(), "Alice".to_string())
+            ).await?.unwrap();
+            let mut user2 = users_repo.get_for_update(
+                &tx,
+                &F::eq("name".to_string(), "Bob".to_string())
+            ).await?.unwrap();
             user1.name = "Bob".to_string();
             user2.name = "Alice".to_string();
-            users_repo.update(&tx, &F::eq("id", user1.id), &user1).await?;
-            users_repo.update(&tx, &F::eq("id", user2.id), &user2).await?;
+            users_repo.update(&tx, &F::eq("id".to_string(), user1.id), &user1).await?;
+            users_repo.update(&tx, &F::eq("id".to_string(), user2.id), &user2).await?;
             Ok(())
         }
     })
