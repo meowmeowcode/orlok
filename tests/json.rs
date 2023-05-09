@@ -153,6 +153,8 @@ async fn get_many() {
             ])),
             vec![&alice, &eve],
         ),
+        // none filter:
+        (Q::filter(F::is_none("weight".to_string())), vec![&eve]),
         // i64 filters:
         (
             Q::filter(F::ne("age".to_string(), bob.age)),
@@ -208,6 +210,17 @@ async fn get_many() {
             vec![&alice, &bob],
         ),
         // string filters:
+        (
+            Q::filter(F::ne("name".to_string(), "Alice".to_string())),
+            vec![&bob, &eve],
+        ),
+        (
+            Q::filter(F::in_(
+                "name".to_string(),
+                vec!["Alice".to_string(), "Eve".to_string()],
+            )),
+            vec![&alice, &eve],
+        ),
         (
             Q::filter(F::contains("name".to_string(), "o".to_string())),
             vec![&bob],

@@ -76,13 +76,16 @@ impl<T> PgRepo<T> {
                 }
                 cond
             }
+            F::IsNone(field) => Expr::col(Name(field.clone())).is_null().into_condition(),
             F::Value { field, op } => {
                 let col = Expr::col(Name(field.to_string()));
                 match op {
                     Op::StrEq(val) => col.eq(val),
+                    Op::StrNe(val) => col.ne(val),
                     Op::StrContains(val) => col.like(format!("%{}%", val)),
                     Op::StrStartsWith(val) => col.like(format!("{}%", val)),
                     Op::StrEndsWith(val) => col.like(format!("%{}", val)),
+                    Op::StrIn(values) => col.is_in(values),
                     Op::IntEq(val) => col.eq(*val),
                     Op::IntNe(val) => col.ne(*val),
                     Op::IntLt(val) => col.lt(*val),
@@ -90,7 +93,7 @@ impl<T> PgRepo<T> {
                     Op::IntLte(val) => col.lte(*val),
                     Op::IntGte(val) => col.gte(*val),
                     Op::IntBetween(x, y) => col.between(*x, *y),
-                    Op::IntIn(values) => col.is_in(values.iter().map(|x| *x)),
+                    Op::IntIn(values) => col.is_in(values.to_owned()),
                     Op::BoolEq(val) => col.eq(*val),
                     Op::BoolNe(val) => col.ne(*val),
                     Op::FloatEq(val) => col.eq(*val),
@@ -114,11 +117,9 @@ impl<T> PgRepo<T> {
                     Op::UuidEq(val) => col.eq(*val),
                     Op::UuidNe(val) => col.ne(*val),
                     Op::UuidIn(values) => col.is_in(values.iter().map(|x| *x)),
-                    _ => todo!(),
                 }
                 .into_condition()
             }
-            _ => todo!(),
         }
     }
 

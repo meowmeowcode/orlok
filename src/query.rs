@@ -151,6 +151,12 @@ impl EqArg for String {
     }
 }
 
+impl NeArg for String {
+    fn to_op(self) -> Op {
+        Op::StrNe(self)
+    }
+}
+
 impl ContainsArg for String {
     fn to_op(self) -> Op {
         Op::StrContains(self)
@@ -166,6 +172,12 @@ impl StartsWithArg for String {
 impl EndsWithArg for String {
     fn to_op(self) -> Op {
         Op::StrEndsWith(self)
+    }
+}
+
+impl InArg for Vec<String> {
+    fn to_op(self) -> Op {
+        Op::StrIn(self)
     }
 }
 
