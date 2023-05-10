@@ -43,12 +43,12 @@ fn default_query(table: &String) -> SelectStatement {
 
 impl<T> PgRepo<T> {
     pub fn new(
-        table: String,
+        table: impl Into<String>,
         dump: fn(entity: &T) -> HashMap<String, SimpleExpr>,
         load: fn(row: &PgRow) -> T,
     ) -> Self {
         Self {
-            table,
+            table: table.into(),
             dump,
             load,
             query: default_query,

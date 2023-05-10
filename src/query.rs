@@ -181,6 +181,42 @@ impl InArg for Vec<String> {
     }
 }
 
+impl EqArg for &str {
+    fn to_op(self) -> Op {
+        Op::StrEq(self.to_string())
+    }
+}
+
+impl NeArg for &str {
+    fn to_op(self) -> Op {
+        Op::StrNe(self.to_string())
+    }
+}
+
+impl ContainsArg for &str {
+    fn to_op(self) -> Op {
+        Op::StrContains(self.to_string())
+    }
+}
+
+impl StartsWithArg for &str {
+    fn to_op(self) -> Op {
+        Op::StrStartsWith(self.to_string())
+    }
+}
+
+impl EndsWithArg for &str {
+    fn to_op(self) -> Op {
+        Op::StrEndsWith(self.to_string())
+    }
+}
+
+impl InArg for Vec<&str> {
+    fn to_op(self) -> Op {
+        Op::StrIn(self.iter().map(|s| s.to_string()).collect())
+    }
+}
+
 impl EqArg for bool {
     fn to_op(self) -> Op {
         Op::BoolEq(self)
@@ -320,83 +356,83 @@ impl InArg for Vec<Uuid> {
 }
 
 impl Filter {
-    pub fn eq(field: String, val: impl EqArg) -> Self {
+    pub fn eq(field: impl Into<String>, val: impl EqArg) -> Self {
         Self::Value {
-            field: field,
+            field: field.into(),
             op: val.to_op(),
         }
     }
 
-    pub fn is_none(field: String) -> Self {
-        Self::IsNone(field)
+    pub fn is_none(field: impl Into<String>) -> Self {
+        Self::IsNone(field.into())
     }
 
-    pub fn ne(field: String, val: impl NeArg) -> Self {
+    pub fn ne(field: impl Into<String>, val: impl NeArg) -> Self {
         Self::Value {
-            field: field,
+            field: field.into(),
             op: val.to_op(),
         }
     }
 
-    pub fn lt(field: String, val: impl LtArg) -> Self {
+    pub fn lt(field: impl Into<String>, val: impl LtArg) -> Self {
         Self::Value {
-            field: field,
+            field: field.into(),
             op: val.to_op(),
         }
     }
 
-    pub fn gt(field: String, val: impl GtArg) -> Self {
+    pub fn gt(field: impl Into<String>, val: impl GtArg) -> Self {
         Self::Value {
-            field: field,
+            field: field.into(),
             op: val.to_op(),
         }
     }
 
-    pub fn lte(field: String, val: impl LteArg) -> Self {
+    pub fn lte(field: impl Into<String>, val: impl LteArg) -> Self {
         Self::Value {
-            field: field,
+            field: field.into(),
             op: val.to_op(),
         }
     }
 
-    pub fn gte(field: String, val: impl GteArg) -> Self {
+    pub fn gte(field: impl Into<String>, val: impl GteArg) -> Self {
         Self::Value {
-            field: field,
+            field: field.into(),
             op: val.to_op(),
         }
     }
 
-    pub fn between(field: String, val: impl BetweenArg) -> Self {
+    pub fn between(field: impl Into<String>, val: impl BetweenArg) -> Self {
         Self::Value {
-            field: field,
+            field: field.into(),
             op: val.to_op(),
         }
     }
 
-    pub fn in_(field: String, val: impl InArg) -> Self {
+    pub fn in_(field: impl Into<String>, val: impl InArg) -> Self {
         Self::Value {
-            field: field,
+            field: field.into(),
             op: val.to_op(),
         }
     }
 
-    pub fn contains(field: String, val: impl ContainsArg) -> Self {
+    pub fn contains(field: impl Into<String>, val: impl ContainsArg) -> Self {
         Self::Value {
-            field: field,
+            field: field.into(),
             op: val.to_op(),
         }
     }
 
-    pub fn starts_with(field: String, val: impl StartsWithArg) -> Self {
+    pub fn starts_with(field: impl Into<String>, val: impl StartsWithArg) -> Self {
         Self::Value {
-            field: field,
+            field: field.into(),
             op: val.to_op(),
         }
     }
 
-    pub fn ends_with(field: String, val: impl EndsWithArg) -> Self {
+    pub fn ends_with(field: impl Into<String>, val: impl EndsWithArg) -> Self {
         Self::Value {
-            field: field,
+            field: field.into(),
             op: val.to_op(),
         }
     }

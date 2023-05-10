@@ -173,7 +173,7 @@ After this, we can create a repository:
 use orlok::Repo;
 use orlok::pg::PgRepo;
 
-let users_repo = PgRepo::new("users".to_string(), dump_user, load_user);
+let users_repo = PgRepo::new("users", dump_user, load_user);
 ```
 
 The first argument for the `new` function is the name of the table where we want to store our users.
@@ -270,7 +270,7 @@ Now we can save new users:
 #         use orlok::Repo;
 #         use orlok::pg::PgRepo;
 # 
-#         let users_repo = PgRepo::new("users".to_string(), dump_user, load_user);
+#         let users_repo = PgRepo::new("users", dump_user, load_user);
 # 
 # 
 #         use orlok::Db;
@@ -362,7 +362,7 @@ Use the `get` method if you want to load only one entity from the database:
 #         use orlok::Repo;
 #         use orlok::pg::PgRepo;
 # 
-#         let users_repo = PgRepo::new("users".to_string(), dump_user, load_user);
+#         let users_repo = PgRepo::new("users", dump_user, load_user);
 # 
 # 
 #         use orlok::Db;
@@ -381,11 +381,7 @@ Use the `get` method if you want to load only one entity from the database:
 # 
 use orlok::F;
 
-let user = users_repo.get(
-    &db,
-    &F::eq("name".to_string(), "Alice".to_string())
-).await?.unwrap();
-
+let user = users_repo.get(&db, &F::eq("name", "Alice")).await?.unwrap();
 assert_eq!(user, alice);
 #         Ok(())
 #     })
@@ -462,7 +458,7 @@ The result of this method contains an `Option` which is `None` if no record was 
 #         use orlok::Repo;
 #         use orlok::pg::PgRepo;
 # 
-#         let users_repo = PgRepo::new("users".to_string(), dump_user, load_user);
+#         let users_repo = PgRepo::new("users", dump_user, load_user);
 # 
 # 
 #         use orlok::Db;
@@ -480,11 +476,7 @@ The result of this method contains an `Option` which is `None` if no record was 
 # 
 # 
 #         use orlok::F;
-let user = users_repo.get(
-    &db,
-    &F::eq("name".to_string(), "Mikhail".to_string())
-).await?;
-
+let user = users_repo.get(&db, &F::eq("name", "Mikhail")).await?;
 assert!(user.is_none());
 #         Ok(())
 #     })
@@ -564,7 +556,7 @@ the letter "o" in their name, we can do something like this:
 #         use orlok::Repo;
 #         use orlok::pg::PgRepo;
 # 
-#         let users_repo = PgRepo::new("users".to_string(), dump_user, load_user);
+#         let users_repo = PgRepo::new("users", dump_user, load_user);
 # 
 # 
 #         use orlok::Db;
@@ -582,11 +574,7 @@ the letter "o" in their name, we can do something like this:
 # 
 # 
 #         use orlok::F;
-let user = users_repo.get(
-    &db,
-    &F::contains("name".to_string(), "o".to_string())
-).await?.unwrap();
-
+let user = users_repo.get(&db, &F::contains("name", "o")).await?.unwrap();
 assert_eq!(user, bob);
 #         Ok(())
 #     })
@@ -663,7 +651,7 @@ Multiple filters can be combined this way:
 #         use orlok::Repo;
 #         use orlok::pg::PgRepo;
 # 
-#         let users_repo = PgRepo::new("users".to_string(), dump_user, load_user);
+#         let users_repo = PgRepo::new("users", dump_user, load_user);
 # 
 # 
 #         use orlok::Db;
@@ -685,8 +673,8 @@ let user = users_repo.get(
     &db,
     &F::and(
         vec![
-            F::starts_with("name".to_string(), "E".to_string()),
-            F::ends_with("name".to_string(), "e".to_string())
+            F::starts_with("name", "E"),
+            F::ends_with("name", "e")
         ]
     )
 ).await?.unwrap();
@@ -769,7 +757,7 @@ If you need to load several entities, use the `get_many` method:
 #         use orlok::Repo;
 #         use orlok::pg::PgRepo;
 # 
-#         let users_repo = PgRepo::new("users".to_string(), dump_user, load_user);
+#         let users_repo = PgRepo::new("users", dump_user, load_user);
 # 
 # 
 #         use orlok::Db;
@@ -791,8 +779,9 @@ use orlok::Query;
 
 let users = users_repo.get_many(
     &db,
-    &Query::filter(F::ends_with("name".to_string(), "e".to_string()))
+    &Query::filter(F::ends_with("name", "e"))
 ).await?;
+
 assert_eq!(users, vec![alice.clone(), eve.clone()]);
 #         Ok(())
 #     })
@@ -870,7 +859,7 @@ options for the limit, offset, and order of entities that we want to retrieve:
 #         use orlok::Repo;
 #         use orlok::pg::PgRepo;
 # 
-#         let users_repo = PgRepo::new("users".to_string(), dump_user, load_user);
+#         let users_repo = PgRepo::new("users", dump_user, load_user);
 # 
 # 
 #         use orlok::Db;
@@ -979,7 +968,7 @@ an appropriate record in the database:
 #         use orlok::Repo;
 #         use orlok::pg::PgRepo;
 # 
-#         let users_repo = PgRepo::new("users".to_string(), dump_user, load_user);
+#         let users_repo = PgRepo::new("users", dump_user, load_user);
 # 
 # 
 #         use orlok::Db;
@@ -997,13 +986,8 @@ an appropriate record in the database:
 # 
 # 
 #         use orlok::F;
-let mut eve = users_repo.get(
-    &db,
-    &F::eq("name".to_string(), "Eve".to_string())
-).await?.unwrap();
-
+let mut eve = users_repo.get(&db, &F::eq("name", "Eve")).await?.unwrap();
 eve.is_active = false;
-
 users_repo.update(&db, &F::eq("id".to_string(), eve.id), &eve).await?;
 #         Ok(())
 #     })
@@ -1082,7 +1066,7 @@ For this we also need a filter:
 #         use orlok::Repo;
 #         use orlok::pg::PgRepo;
 # 
-#         let users_repo = PgRepo::new("users".to_string(), dump_user, load_user);
+#         let users_repo = PgRepo::new("users", dump_user, load_user);
 # 
 # 
 #         use orlok::Db;
@@ -1100,10 +1084,10 @@ For this we also need a filter:
 # 
 # 
 #         use orlok::F;
-#         let mut eve = users_repo.get(&db, &F::eq("name".to_string(), "Eve".to_string())).await?.unwrap();
+#         let mut eve = users_repo.get(&db, &F::eq("name", "Eve")).await?.unwrap();
 #         eve.is_active = false;
-#         users_repo.update(&db, &F::eq("id".to_string(), eve.id), &eve).await?;
-users_repo.delete(&db, &F::eq("is_active".to_string(), false)).await?;
+#         users_repo.update(&db, &F::eq("id", eve.id), &eve).await?;
+users_repo.delete(&db, &F::eq("is_active", false)).await?;
 #         Ok(())
 #     })
 # }
@@ -1181,7 +1165,7 @@ Use a closure to execute code in a transaction and return `Ok` to complete the t
 #         use orlok::Repo;
 #         use orlok::pg::PgRepo;
 # 
-#         let users_repo = PgRepo::new("users".to_string(), dump_user, load_user);
+#         let users_repo = PgRepo::new("users", dump_user, load_user);
 # 
 # 
 #         use orlok::Db;
@@ -1204,17 +1188,15 @@ db.transaction(|tx| {
         let users_repo = users_repo.clone();
         async move {
             let mut user1 = users_repo.get_for_update(
-                &tx,
-                &F::eq("name".to_string(), "Alice".to_string())
+                &tx, &F::eq("name", "Alice")
             ).await?.unwrap();
             let mut user2 = users_repo.get_for_update(
-                &tx,
-                &F::eq("name".to_string(), "Bob".to_string())
+                &tx, &F::eq("name", "Bob")
             ).await?.unwrap();
             user1.name = "Bob".to_string();
             user2.name = "Alice".to_string();
-            users_repo.update(&tx, &F::eq("id".to_string(), user1.id), &user1).await?;
-            users_repo.update(&tx, &F::eq("id".to_string(), user2.id), &user2).await?;
+            users_repo.update(&tx, &F::eq("id", user1.id), &user1).await?;
+            users_repo.update(&tx, &F::eq("id", user2.id), &user2).await?;
             Ok(())
         }
     })
@@ -1260,7 +1242,7 @@ impl User {
     }
 }
 
-let users_repo = JsonRepo::new("users".to_string());
+let users_repo = JsonRepo::new("users");
 let db = JsonDb::new();
 let user = User::new("Alice".to_string());
 users_repo.add(&db, &user).await?;

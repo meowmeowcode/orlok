@@ -7,7 +7,7 @@ use orlok::query::{Order, F, Q};
 use common::User;
 
 async fn users_repo() -> JsonRepo<User> {
-    JsonRepo::new("users".to_string())
+    JsonRepo::new("users")
 }
 
 async fn db<'a>() -> JsonDb<'a> {
@@ -21,16 +21,12 @@ async fn get() {
     let alice = common::add_alice(&db, &repo).await;
     let bob = common::add_bob(&db, &repo).await;
     let result = repo
-        .get(&db, &F::eq("name".to_string(), "Alice".to_string()))
+        .get(&db, &F::eq("name", "Alice"))
         .await
         .unwrap()
         .unwrap();
     assert_eq!(result, alice);
-    let result = repo
-        .get(&db, &F::eq("id".to_string(), bob.id))
-        .await
-        .unwrap()
-        .unwrap();
+    let result = repo.get(&db, &F::eq("id", bob.id)).await.unwrap().unwrap();
     assert_eq!(result, bob);
 }
 
@@ -39,10 +35,7 @@ async fn get_none() {
     let db = db().await;
     let repo = users_repo().await;
     common::add_alice(&db, &repo).await;
-    let result = repo
-        .get(&db, &F::eq("name".to_string(), "test".to_string()))
-        .await
-        .unwrap();
+    let result = repo.get(&db, &F::eq("name", "test")).await.unwrap();
     assert!(result.is_none());
 }
 
@@ -51,16 +44,12 @@ async fn exists() {
     let db = db().await;
     let repo = users_repo().await;
     assert_eq!(
-        repo.exists(&db, &F::eq("name".to_string(), "Alice".to_string()))
-            .await
-            .unwrap(),
+        repo.exists(&db, &F::eq("name", "Alice")).await.unwrap(),
         false
     );
     common::add_alice(&db, &repo).await;
     assert_eq!(
-        repo.exists(&db, &F::eq("name".to_string(), "Alice".to_string()))
-            .await
-            .unwrap(),
+        repo.exists(&db, &F::eq("name", "Alice")).await.unwrap(),
         true
     );
 }
@@ -69,10 +58,7 @@ async fn exists() {
 async fn count() {
     let db = db().await;
     let repo = users_repo().await;
-    let filter = F::or(vec![
-        F::eq("name".to_string(), "Bob".to_string()),
-        F::eq("name".to_string(), "Alice".to_string()),
-    ]);
+    let filter = F::or(vec![F::eq("name", "Bob"), F::eq("name", "Alice")]);
     assert_eq!(repo.count(&db, &filter).await.unwrap(), 0);
     common::add_alice(&db, &repo).await;
     common::add_bob(&db, &repo).await;
@@ -100,10 +86,7 @@ async fn delete() {
     let eve = common::add_eve(&db, &repo).await;
     repo.delete(
         &db,
-        &F::or(vec![
-            F::eq("name".to_string(), "Bob".to_string()),
-            F::eq("name".to_string(), "Alice".to_string()),
-        ]),
+        &F::or(vec![F::eq("name", "Bob"), F::eq("name", "Alice")]),
     )
     .await
     .unwrap();
@@ -119,9 +102,7 @@ async fn update() {
     let mut bob = common::add_bob(&db, &repo).await;
     let eve = common::add_eve(&db, &repo).await;
     bob.name = "Robert".to_string();
-    repo.update(&db, &F::eq("id".to_string(), bob.id), &bob)
-        .await
-        .unwrap();
+    repo.update(&db, &F::eq("id", bob.id), &bob).await.unwrap();
     let users = repo
         .get_many(&db, &Q::new().order(vec![Order::Asc("name".to_string())]))
         .await
@@ -140,157 +121,100 @@ async fn get_many() {
     let cases = [
         // and, or:
         (
-            Q::filter(F::and(vec![
-                F::gt("age".to_string(), alice.age),
-                F::lt("age".to_string(), eve.age),
-            ])),
+            Q::filter(F::and(vec![F::gt("age", alice.age), F::lt("age", eve.age)])),
             vec![&bob],
         ),
         (
-            Q::filter(F::or(vec![
-                F::eq("age".to_string(), alice.age),
-                F::eq("age".to_string(), eve.age),
-            ])),
+            Q::filter(F::or(vec![F::eq("age", alice.age), F::eq("age", eve.age)])),
             vec![&alice, &eve],
         ),
         // none filter:
-        (Q::filter(F::is_none("weight".to_string())), vec![&eve]),
+        (Q::filter(F::is_none("weight")), vec![&eve]),
         // i64 filters:
+        (Q::filter(F::ne("age", bob.age)), vec![&alice, &eve]),
+        (Q::filter(F::lt("age", eve.age)), vec![&alice, &bob]),
+        (Q::filter(F::gt("age", alice.age)), vec![&bob, &eve]),
+        (Q::filter(F::lte("age", bob.age)), vec![&alice, &bob]),
+        (Q::filter(F::gte("age", bob.age)), vec![&bob, &eve]),
         (
-            Q::filter(F::ne("age".to_string(), bob.age)),
+            Q::filter(F::in_("age", vec![alice.age, eve.age])),
             vec![&alice, &eve],
         ),
         (
-            Q::filter(F::lt("age".to_string(), eve.age)),
-            vec![&alice, &bob],
-        ),
-        (
-            Q::filter(F::gt("age".to_string(), alice.age)),
-            vec![&bob, &eve],
-        ),
-        (
-            Q::filter(F::lte("age".to_string(), bob.age)),
-            vec![&alice, &bob],
-        ),
-        (
-            Q::filter(F::gte("age".to_string(), bob.age)),
-            vec![&bob, &eve],
-        ),
-        (
-            Q::filter(F::in_("age".to_string(), vec![alice.age, eve.age])),
-            vec![&alice, &eve],
-        ),
-        (
-            Q::filter(F::between("age".to_string(), (alice.age, bob.age))),
+            Q::filter(F::between("age", (alice.age, bob.age))),
             vec![&alice, &bob],
         ),
         // f64 filters
+        (Q::filter(F::eq("weight", bob.weight.unwrap())), vec![&bob]),
         (
-            Q::filter(F::eq("weight".to_string(), bob.weight.unwrap())),
-            vec![&bob],
-        ),
-        (
-            Q::filter(F::ne("weight".to_string(), bob.weight.unwrap())),
+            Q::filter(F::ne("weight", bob.weight.unwrap())),
             vec![&alice],
         ),
         (
-            Q::filter(F::lt("weight".to_string(), bob.weight.unwrap())),
+            Q::filter(F::lt("weight", bob.weight.unwrap())),
             vec![&alice],
         ),
         (
-            Q::filter(F::gt("weight".to_string(), alice.weight.unwrap())),
+            Q::filter(F::gt("weight", alice.weight.unwrap())),
             vec![&bob],
         ),
         (
-            Q::filter(F::lte("weight".to_string(), bob.weight.unwrap())),
+            Q::filter(F::lte("weight", bob.weight.unwrap())),
             vec![&alice, &bob],
         ),
         (
-            Q::filter(F::gte("weight".to_string(), alice.weight.unwrap())),
+            Q::filter(F::gte("weight", alice.weight.unwrap())),
             vec![&alice, &bob],
         ),
         // string filters:
+        (Q::filter(F::ne("name", "Alice")), vec![&bob, &eve]),
         (
-            Q::filter(F::ne("name".to_string(), "Alice".to_string())),
-            vec![&bob, &eve],
-        ),
-        (
-            Q::filter(F::in_(
-                "name".to_string(),
-                vec!["Alice".to_string(), "Eve".to_string()],
-            )),
+            Q::filter(F::in_("name", vec!["Alice", "Eve"])),
             vec![&alice, &eve],
         ),
-        (
-            Q::filter(F::contains("name".to_string(), "o".to_string())),
-            vec![&bob],
-        ),
-        (
-            Q::filter(F::starts_with("name".to_string(), "E".to_string())),
-            vec![&eve],
-        ),
-        (
-            Q::filter(F::ends_with("name".to_string(), "e".to_string())),
-            vec![&alice, &eve],
-        ),
+        (Q::filter(F::contains("name", "o")), vec![&bob]),
+        (Q::filter(F::starts_with("name", "E")), vec![&eve]),
+        (Q::filter(F::ends_with("name", "e")), vec![&alice, &eve]),
         // bool filters:
-        (Q::filter(F::eq("is_evil".to_string(), true)), vec![&eve]),
-        (
-            Q::filter(F::eq("is_evil".to_string(), false)),
-            vec![&alice, &bob],
-        ),
+        (Q::filter(F::eq("is_evil", true)), vec![&eve]),
+        (Q::filter(F::eq("is_evil", false)), vec![&alice, &bob]),
         // datetime filters:
         (
-            Q::filter(F::eq("registered_at".to_string(), bob.registered_at)),
+            Q::filter(F::eq("registered_at", bob.registered_at)),
             vec![&bob],
         ),
         (
-            Q::filter(F::ne("registered_at".to_string(), bob.registered_at)),
+            Q::filter(F::ne("registered_at", bob.registered_at)),
             vec![&alice, &eve],
         ),
         (
-            Q::filter(F::lt("registered_at".to_string(), bob.registered_at)),
+            Q::filter(F::lt("registered_at", bob.registered_at)),
             vec![&alice],
         ),
         (
-            Q::filter(F::gt("registered_at".to_string(), bob.registered_at)),
+            Q::filter(F::gt("registered_at", bob.registered_at)),
             vec![&eve],
         ),
         (
-            Q::filter(F::lte("registered_at".to_string(), bob.registered_at)),
+            Q::filter(F::lte("registered_at", bob.registered_at)),
             vec![&alice, &bob],
         ),
         (
-            Q::filter(F::gte("registered_at".to_string(), bob.registered_at)),
+            Q::filter(F::gte("registered_at", bob.registered_at)),
             vec![&bob, &eve],
         ),
         // decimal filters:
-        (Q::filter(F::eq("money".to_string(), bob.money)), vec![&bob]),
-        (
-            Q::filter(F::ne("money".to_string(), bob.money)),
-            vec![&alice, &eve],
-        ),
-        (
-            Q::filter(F::lt("money".to_string(), bob.money)),
-            vec![&alice],
-        ),
-        (Q::filter(F::gt("money".to_string(), bob.money)), vec![&eve]),
-        (
-            Q::filter(F::lte("money".to_string(), bob.money)),
-            vec![&alice, &bob],
-        ),
-        (
-            Q::filter(F::gte("money".to_string(), bob.money)),
-            vec![&bob, &eve],
-        ),
+        (Q::filter(F::eq("money", bob.money)), vec![&bob]),
+        (Q::filter(F::ne("money", bob.money)), vec![&alice, &eve]),
+        (Q::filter(F::lt("money", bob.money)), vec![&alice]),
+        (Q::filter(F::gt("money", bob.money)), vec![&eve]),
+        (Q::filter(F::lte("money", bob.money)), vec![&alice, &bob]),
+        (Q::filter(F::gte("money", bob.money)), vec![&bob, &eve]),
         // uuid filters:
-        (Q::filter(F::eq("id".to_string(), bob.id)), vec![&bob]),
+        (Q::filter(F::eq("id", bob.id)), vec![&bob]),
+        (Q::filter(F::ne("id", bob.id)), vec![&alice, &eve]),
         (
-            Q::filter(F::ne("id".to_string(), bob.id)),
-            vec![&alice, &eve],
-        ),
-        (
-            Q::filter(F::in_("id".to_string(), vec![alice.id, eve.id])),
+            Q::filter(F::in_("id", vec![alice.id, eve.id])),
             vec![&alice, &eve],
         ),
         // offset, limit, order:
@@ -323,8 +247,7 @@ async fn transaction() {
         Box::pin({
             let repo = repo.clone();
             async move {
-                repo.delete(tx, &F::eq("name".to_string(), "Bob".to_string()))
-                    .await?;
+                repo.delete(tx, &F::eq("name", "Bob")).await?;
                 Ok(())
             }
         })
@@ -332,10 +255,7 @@ async fn transaction() {
     .await
     .unwrap();
 
-    let bob = repo
-        .get(&db, &F::eq("name".to_string(), "Bob".to_string()))
-        .await
-        .unwrap();
+    let bob = repo.get(&db, &F::eq("name", "Bob")).await.unwrap();
     assert!(bob.is_none());
 }
 
@@ -350,8 +270,7 @@ async fn transaction_rollback() {
             Box::pin({
                 let repo = repo.clone();
                 async move {
-                    repo.delete(tx, &F::eq("name".to_string(), "Alice".to_string()))
-                        .await?;
+                    repo.delete(tx, &F::eq("name", "Alice")).await?;
                     anyhow::bail!("failed transaction")
                 }
             })
@@ -359,10 +278,7 @@ async fn transaction_rollback() {
         .await;
 
     assert!(result.is_err());
-    let alice = repo
-        .get(&db, &F::eq("name".to_string(), "Alice".to_string()))
-        .await
-        .unwrap();
+    let alice = repo.get(&db, &F::eq("name", "Alice")).await.unwrap();
     assert!(alice.is_some());
 }
 
@@ -378,12 +294,11 @@ async fn get_for_update() {
             let repo = repo.clone();
             async move {
                 let mut user = repo
-                    .get_for_update(tx, &F::eq("id".to_string(), user.id))
+                    .get_for_update(tx, &F::eq("id", user.id))
                     .await?
                     .unwrap();
                 user.name = new_name.to_string();
-                repo.update(tx, &F::eq("id".to_string(), user.id), &user)
-                    .await?;
+                repo.update(tx, &F::eq("id", user.id), &user).await?;
                 Ok(())
             }
         })
@@ -391,10 +306,6 @@ async fn get_for_update() {
     .await
     .unwrap();
 
-    let user = repo
-        .get(&db, &F::eq("id".to_string(), user.id))
-        .await
-        .unwrap()
-        .unwrap();
+    let user = repo.get(&db, &F::eq("id", user.id)).await.unwrap().unwrap();
     assert_eq!(user.name, new_name);
 }

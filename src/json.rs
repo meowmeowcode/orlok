@@ -30,9 +30,9 @@ impl<T> JsonRepo<T>
 where
     T: Clone + Serialize + for<'de> Deserialize<'de>,
 {
-    pub fn new(key: String) -> Self {
+    pub fn new(key: impl Into<String>) -> Self {
         Self {
-            key,
+            key: key.into(),
             phantom: PhantomData,
         }
     }
