@@ -32,24 +32,24 @@ orlok = "0"
 
 ### Creating a repository
 
-Suppose we have a struct representing a user of some application:
+Suppose we have a struct representing a character of some story:
 
 ```rust
 use uuid::Uuid;
 
 #[derive(PartialEq, Clone, Debug)]
-pub struct User {
+pub struct Character {
     pub id: Uuid,
     pub name: String,
-    pub is_active: bool,
+    pub location: String,
 }
 
-impl User {
-    pub fn new(name: String) -> Self {
+impl Character {
+    pub fn new(name: String, location: String) -> Self {
         Self {
             id: Uuid::new_v4(),
-            name: name,
-            is_active: true,
+            name,
+            location,
         }
     }
 }
@@ -68,48 +68,48 @@ let pool = PgPool::connect("postgresql://orlok:orlok@localhost/orlok")
     .await?;
 
 sqlx::query(
-    "create table if not exists users (
+    "create table if not exists characters (
         id uuid,
         name text,
-        is_active boolean
+        location text
     )"
 )
 .execute(&pool)
 .await?;
-#         sqlx::query("delete from users").execute(&pool).await?;
+#         sqlx::query("delete from characters").execute(&pool).await?;
 #         Ok(())
 #     })
 # }
 ```
 
-To save the user struct to the database we need
+To save the character struct to the database we need
 to somehow map its fields to a table row.
 We can define a function for this.
 This function must return a `HashMap` with keys and values
-that correspond to columns and values in the "users" table:
+that correspond to columns and values in the "characters" table:
 
 ```rust
 #         use uuid::Uuid;
 # 
 #         #[derive(PartialEq, Clone, Debug)]
-#         pub struct User {
+#         pub struct Character {
 #             pub id: Uuid,
 #             pub name: String,
-#             pub is_active: bool,
+#             pub location: String,
 #         }
 use std::collections::HashMap;
 use sea_query::SimpleExpr;
 
-fn dump_user(u: &User) -> HashMap<String, SimpleExpr> {
+fn dump_character(u: &Character) -> HashMap<String, SimpleExpr> {
     HashMap::from([
         ("id".to_string(), u.id.into()),
         ("name".to_string(), u.name.clone().into()),
-        ("is_active".to_string(), u.is_active.into()),
+        ("location".to_string(), u.location.clone().into()),
     ])
 }
 ```
 
-After saving the user struct to the database,
+After saving the character struct to the database,
 we want to be able to load it back,
 so we need a function that maps
 a database row to the struct:
@@ -118,19 +118,19 @@ a database row to the struct:
 #         use uuid::Uuid;
 #
 #         #[derive(PartialEq, Clone, Debug)]
-#         pub struct User {
+#         pub struct Character {
 #             pub id: Uuid,
 #             pub name: String,
-#             pub is_active: bool,
+#             pub location: String,
 #         }
 use sqlx::Row;
 use sqlx::postgres::PgRow;
 
-fn load_user(row: &PgRow) -> User {
-    User {
+fn load_character(row: &PgRow) -> Character {
+    Character {
         id: row.get("id"),
         name: row.get("name"),
-        is_active: row.get("is_active"),
+        location: row.get("location"),
     }
 }
 ```
@@ -141,19 +141,19 @@ After this, we can create a repository:
 #         use uuid::Uuid;
 # 
 #         #[derive(PartialEq, Clone, Debug)]
-#         pub struct User {
+#         pub struct Character {
 #             pub id: Uuid,
 #             pub name: String,
-#             pub is_active: bool,
+#             pub location: String,
 #         }
 #         use std::collections::HashMap;
 #         use sea_query::SimpleExpr;
 # 
-#         fn dump_user(u: &User) -> HashMap<String, SimpleExpr> {
+#         fn dump_character(u: &Character) -> HashMap<String, SimpleExpr> {
 #             HashMap::from([
 #                 ("id".to_string(), u.id.into()),
 #                 ("name".to_string(), u.name.clone().into()),
-#                 ("is_active".to_string(), u.is_active.into()),
+#                 ("location".to_string(), u.location.clone().into()),
 #             ])
 #         }
 # 
@@ -161,11 +161,11 @@ After this, we can create a repository:
 #         use sqlx::Row;
 #         use sqlx::postgres::PgRow;
 # 
-#         fn load_user(row: &PgRow) -> User {
-#             User {
+#         fn load_character(row: &PgRow) -> Character {
+#             Character {
 #                 id: row.get("id"),
 #                 name: row.get("name"),
-#                 is_active: row.get("is_active"),
+#                 location: row.get("location"),
 #             }
 #         }
 # 
@@ -173,10 +173,10 @@ After this, we can create a repository:
 use orlok::Repo;
 use orlok::pg::PgRepo;
 
-let users_repo = PgRepo::new("users", dump_user, load_user);
+let characters_repo = PgRepo::new("characters", dump_character, load_character);
 ```
 
-The first argument for the `new` function is the name of the table where we want to store our users.
+The first argument for the `new` function is the name of the table where we want to store our characters.
 
 ### Saving entities
 
@@ -200,7 +200,7 @@ let db = PgDb::new(pool);
 # }
 ```
 
-Now we can save new users:
+Now we can save new characters:
 
 ```rust
 # use tokio_test;
@@ -209,18 +209,18 @@ Now we can save new users:
 #         use uuid::Uuid;
 # 
 #         #[derive(PartialEq, Clone, Debug)]
-#         pub struct User {
+#         pub struct Character {
 #             pub id: Uuid,
 #             pub name: String,
-#             pub is_active: bool,
+#             pub location: String,
 #         }
 # 
-#         impl User {
-#             pub fn new(name: String) -> Self {
+#         impl Character {
+#             pub fn new(name: String, location: String) -> Self {
 #                 Self {
 #                     id: Uuid::new_v4(),
-#                     name: name,
-#                     is_active: true,
+#                     name,
+#                     location,
 #                 }
 #             }
 #         }
@@ -232,25 +232,25 @@ Now we can save new users:
 #             .await?;
 # 
 #         sqlx::query(
-#             "create table if not exists users (
+#             "create table if not exists characters (
 #                 id uuid,
 #                 name text,
-#                 is_active boolean
+#                 location text
 #             )"
 #         )
 #         .execute(&pool)
 #         .await?;
-#         sqlx::query("delete from users").execute(&pool).await?;
+#         sqlx::query("delete from characters").execute(&pool).await?;
 # 
 # 
 #         use std::collections::HashMap;
 #         use sea_query::SimpleExpr;
 # 
-#         fn dump_user(u: &User) -> HashMap<String, SimpleExpr> {
+#         fn dump_character(u: &Character) -> HashMap<String, SimpleExpr> {
 #             HashMap::from([
 #                 ("id".to_string(), u.id.into()),
 #                 ("name".to_string(), u.name.clone().into()),
-#                 ("is_active".to_string(), u.is_active.into()),
+#                 ("location".to_string(), u.location.clone().into()),
 #             ])
 #         }
 # 
@@ -258,11 +258,11 @@ Now we can save new users:
 #         use sqlx::Row;
 #         use sqlx::postgres::PgRow;
 # 
-#         fn load_user(row: &PgRow) -> User {
-#             User {
+#         fn load_character(row: &PgRow) -> Character {
+#             Character {
 #                 id: row.get("id"),
 #                 name: row.get("name"),
-#                 is_active: row.get("is_active"),
+#                 location: row.get("location"),
 #             }
 #         }
 # 
@@ -270,7 +270,7 @@ Now we can save new users:
 #         use orlok::Repo;
 #         use orlok::pg::PgRepo;
 # 
-#         let users_repo = PgRepo::new("users", dump_user, load_user);
+#         let characters_repo = PgRepo::new("characters", dump_character, load_character);
 # 
 # 
 #         use orlok::Db;
@@ -279,12 +279,12 @@ Now we can save new users:
 #         let db = PgDb::new(pool);
 # 
 # 
-let alice = User::new("Alice".to_string());
-users_repo.add(&db, &alice).await?;
-let bob = User::new("Bob".to_string());
-users_repo.add(&db, &bob).await?;
-let eve = User::new("Eve".to_string());
-users_repo.add(&db, &eve).await?;
+let orlok = Character::new("Orlok".to_string(), "Transylvania".to_string());
+characters_repo.add(&db, &orlok).await?;
+let thomas = Character::new("Thomas".to_string(), "Wisborg".to_string());
+characters_repo.add(&db, &thomas).await?;
+let ellen = Character::new("Ellen".to_string(), "Wisborg".to_string());
+characters_repo.add(&db, &ellen).await?;
 #         Ok(())
 #     })
 # }
@@ -301,18 +301,18 @@ Use the `get` method if you want to load only one entity from the database:
 #         use uuid::Uuid;
 # 
 #         #[derive(PartialEq, Clone, Debug)]
-#         pub struct User {
+#         pub struct Character {
 #             pub id: Uuid,
 #             pub name: String,
-#             pub is_active: bool,
+#             pub location: String,
 #         }
 # 
-#         impl User {
-#             pub fn new(name: String) -> Self {
+#         impl Character {
+#             pub fn new(name: String, location: String) -> Self {
 #                 Self {
 #                     id: Uuid::new_v4(),
-#                     name: name,
-#                     is_active: true,
+#                     name,
+#                     location,
 #                 }
 #             }
 #         }
@@ -324,25 +324,25 @@ Use the `get` method if you want to load only one entity from the database:
 #             .await?;
 # 
 #         sqlx::query(
-#             "create table if not exists users (
+#             "create table if not exists characters (
 #                 id uuid,
 #                 name text,
-#                 is_active boolean
+#                 location text
 #             )"
 #         )
 #         .execute(&pool)
 #         .await?;
-#         sqlx::query("delete from users").execute(&pool).await?;
+#         sqlx::query("delete from characters").execute(&pool).await?;
 # 
 # 
 #         use std::collections::HashMap;
 #         use sea_query::SimpleExpr;
 # 
-#         fn dump_user(u: &User) -> HashMap<String, SimpleExpr> {
+#         fn dump_character(u: &Character) -> HashMap<String, SimpleExpr> {
 #             HashMap::from([
 #                 ("id".to_string(), u.id.into()),
 #                 ("name".to_string(), u.name.clone().into()),
-#                 ("is_active".to_string(), u.is_active.into()),
+#                 ("location".to_string(), u.location.clone().into()),
 #             ])
 #         }
 # 
@@ -350,11 +350,11 @@ Use the `get` method if you want to load only one entity from the database:
 #         use sqlx::Row;
 #         use sqlx::postgres::PgRow;
 # 
-#         fn load_user(row: &PgRow) -> User {
-#             User {
+#         fn load_character(row: &PgRow) -> Character {
+#             Character {
 #                 id: row.get("id"),
 #                 name: row.get("name"),
-#                 is_active: row.get("is_active"),
+#                 location: row.get("location"),
 #             }
 #         }
 # 
@@ -362,7 +362,7 @@ Use the `get` method if you want to load only one entity from the database:
 #         use orlok::Repo;
 #         use orlok::pg::PgRepo;
 # 
-#         let users_repo = PgRepo::new("users", dump_user, load_user);
+#         let characters_repo = PgRepo::new("characters", dump_character, load_character);
 # 
 # 
 #         use orlok::Db;
@@ -371,18 +371,18 @@ Use the `get` method if you want to load only one entity from the database:
 #         let db = PgDb::new(pool);
 # 
 # 
-#         let alice = User::new("Alice".to_string());
-#         users_repo.add(&db, &alice).await?;
-#         let bob = User::new("Bob".to_string());
-#         users_repo.add(&db, &bob).await?;
-#         let eve = User::new("Eve".to_string());
-#         users_repo.add(&db, &eve).await?;
+#         let orlok = Character::new("Orlok".to_string(), "Transylvania".to_string());
+#         characters_repo.add(&db, &orlok).await?;
+#         let thomas = Character::new("Thomas".to_string(), "Wisborg".to_string());
+#         characters_repo.add(&db, &thomas).await?;
+#         let ellen = Character::new("Ellen".to_string(), "Wisborg".to_string());
+#         characters_repo.add(&db, &ellen).await?;
 # 
 # 
 use orlok::F;
 
-let user = users_repo.get(&db, &F::eq("name", "Alice")).await?.unwrap();
-assert_eq!(user, alice);
+let character = characters_repo.get(&db, &F::eq("name", "Orlok")).await?.unwrap();
+assert_eq!(character, orlok);
 #         Ok(())
 #     })
 # }
@@ -397,18 +397,18 @@ The result of this method contains an `Option` which is `None` if no record was 
 #         use uuid::Uuid;
 # 
 #         #[derive(PartialEq, Clone, Debug)]
-#         pub struct User {
+#         pub struct Character {
 #             pub id: Uuid,
 #             pub name: String,
-#             pub is_active: bool,
+#             pub location: String,
 #         }
 # 
-#         impl User {
-#             pub fn new(name: String) -> Self {
+#         impl Character {
+#             pub fn new(name: String, location: String) -> Self {
 #                 Self {
 #                     id: Uuid::new_v4(),
-#                     name: name,
-#                     is_active: true,
+#                     name,
+#                     location,
 #                 }
 #             }
 #         }
@@ -420,25 +420,25 @@ The result of this method contains an `Option` which is `None` if no record was 
 #             .await?;
 # 
 #         sqlx::query(
-#             "create table if not exists users (
+#             "create table if not exists characters (
 #                 id uuid,
 #                 name text,
-#                 is_active boolean
+#                 location text
 #             )"
 #         )
 #         .execute(&pool)
 #         .await?;
-#         sqlx::query("delete from users").execute(&pool).await?;
+#         sqlx::query("delete from characters").execute(&pool).await?;
 # 
 # 
 #         use std::collections::HashMap;
 #         use sea_query::SimpleExpr;
 # 
-#         fn dump_user(u: &User) -> HashMap<String, SimpleExpr> {
+#         fn dump_character(u: &Character) -> HashMap<String, SimpleExpr> {
 #             HashMap::from([
 #                 ("id".to_string(), u.id.into()),
 #                 ("name".to_string(), u.name.clone().into()),
-#                 ("is_active".to_string(), u.is_active.into()),
+#                 ("location".to_string(), u.location.clone().into()),
 #             ])
 #         }
 # 
@@ -446,11 +446,11 @@ The result of this method contains an `Option` which is `None` if no record was 
 #         use sqlx::Row;
 #         use sqlx::postgres::PgRow;
 # 
-#         fn load_user(row: &PgRow) -> User {
-#             User {
+#         fn load_character(row: &PgRow) -> Character {
+#             Character {
 #                 id: row.get("id"),
 #                 name: row.get("name"),
-#                 is_active: row.get("is_active"),
+#                 location: row.get("location"),
 #             }
 #         }
 # 
@@ -458,7 +458,7 @@ The result of this method contains an `Option` which is `None` if no record was 
 #         use orlok::Repo;
 #         use orlok::pg::PgRepo;
 # 
-#         let users_repo = PgRepo::new("users", dump_user, load_user);
+#         let characters_repo = PgRepo::new("characters", dump_character, load_character);
 # 
 # 
 #         use orlok::Db;
@@ -467,17 +467,17 @@ The result of this method contains an `Option` which is `None` if no record was 
 #         let db = PgDb::new(pool);
 # 
 # 
-#         let alice = User::new("Alice".to_string());
-#         users_repo.add(&db, &alice).await?;
-#         let bob = User::new("Bob".to_string());
-#         users_repo.add(&db, &bob).await?;
-#         let eve = User::new("Eve".to_string());
-#         users_repo.add(&db, &eve).await?;
+#         let orlok = Character::new("Orlok".to_string(), "Transylvania".to_string());
+#         characters_repo.add(&db, &orlok).await?;
+#         let thomas = Character::new("Thomas".to_string(), "Wisborg".to_string());
+#         characters_repo.add(&db, &thomas).await?;
+#         let ellen = Character::new("Ellen".to_string(), "Wisborg".to_string());
+#         characters_repo.add(&db, &ellen).await?;
 # 
 # 
 #         use orlok::F;
-let user = users_repo.get(&db, &F::eq("name", "Mikhail")).await?;
-assert!(user.is_none());
+let character = characters_repo.get(&db, &F::eq("name", "Knock")).await?;
+assert!(character.is_none());
 #         Ok(())
 #     })
 # }
@@ -485,8 +485,8 @@ assert!(user.is_none());
 
 Note that here we use the `F` struct for filtering entities.
 It has different methods for different conditions.
-For example, if we want to find a user with
-the letter "o" in their name, we can do something like this:
+For example, if we want to find a character with
+the letter "h" in their name, we can do something like this:
 
 ```rust
 # use tokio_test;
@@ -495,18 +495,18 @@ the letter "o" in their name, we can do something like this:
 #         use uuid::Uuid;
 # 
 #         #[derive(PartialEq, Clone, Debug)]
-#         pub struct User {
+#         pub struct Character {
 #             pub id: Uuid,
 #             pub name: String,
-#             pub is_active: bool,
+#             pub location: String,
 #         }
 # 
-#         impl User {
-#             pub fn new(name: String) -> Self {
+#         impl Character {
+#             pub fn new(name: String, location: String) -> Self {
 #                 Self {
 #                     id: Uuid::new_v4(),
-#                     name: name,
-#                     is_active: true,
+#                     name,
+#                     location,
 #                 }
 #             }
 #         }
@@ -518,25 +518,25 @@ the letter "o" in their name, we can do something like this:
 #             .await?;
 # 
 #         sqlx::query(
-#             "create table if not exists users (
+#             "create table if not exists characters (
 #                 id uuid,
 #                 name text,
-#                 is_active boolean
+#                 location text
 #             )"
 #         )
 #         .execute(&pool)
 #         .await?;
-#         sqlx::query("delete from users").execute(&pool).await?;
+#         sqlx::query("delete from characters").execute(&pool).await?;
 # 
 # 
 #         use std::collections::HashMap;
 #         use sea_query::SimpleExpr;
 # 
-#         fn dump_user(u: &User) -> HashMap<String, SimpleExpr> {
+#         fn dump_character(u: &Character) -> HashMap<String, SimpleExpr> {
 #             HashMap::from([
 #                 ("id".to_string(), u.id.into()),
 #                 ("name".to_string(), u.name.clone().into()),
-#                 ("is_active".to_string(), u.is_active.into()),
+#                 ("location".to_string(), u.location.clone().into()),
 #             ])
 #         }
 # 
@@ -544,11 +544,11 @@ the letter "o" in their name, we can do something like this:
 #         use sqlx::Row;
 #         use sqlx::postgres::PgRow;
 # 
-#         fn load_user(row: &PgRow) -> User {
-#             User {
+#         fn load_character(row: &PgRow) -> Character {
+#             Character {
 #                 id: row.get("id"),
 #                 name: row.get("name"),
-#                 is_active: row.get("is_active"),
+#                 location: row.get("location"),
 #             }
 #         }
 # 
@@ -556,7 +556,7 @@ the letter "o" in their name, we can do something like this:
 #         use orlok::Repo;
 #         use orlok::pg::PgRepo;
 # 
-#         let users_repo = PgRepo::new("users", dump_user, load_user);
+#         let characters_repo = PgRepo::new("characters", dump_character, load_character);
 # 
 # 
 #         use orlok::Db;
@@ -565,17 +565,17 @@ the letter "o" in their name, we can do something like this:
 #         let db = PgDb::new(pool);
 # 
 # 
-#         let alice = User::new("Alice".to_string());
-#         users_repo.add(&db, &alice).await?;
-#         let bob = User::new("Bob".to_string());
-#         users_repo.add(&db, &bob).await?;
-#         let eve = User::new("Eve".to_string());
-#         users_repo.add(&db, &eve).await?;
+#         let orlok = Character::new("Orlok".to_string(), "Transylvania".to_string());
+#         characters_repo.add(&db, &orlok).await?;
+#         let thomas = Character::new("Thomas".to_string(), "Wisborg".to_string());
+#         characters_repo.add(&db, &thomas).await?;
+#         let ellen = Character::new("Ellen".to_string(), "Wisborg".to_string());
+#         characters_repo.add(&db, &ellen).await?;
 # 
 # 
 #         use orlok::F;
-let user = users_repo.get(&db, &F::contains("name", "o")).await?.unwrap();
-assert_eq!(user, bob);
+let character = characters_repo.get(&db, &F::contains("name", "h")).await?.unwrap();
+assert_eq!(character, thomas);
 #         Ok(())
 #     })
 # }
@@ -590,18 +590,18 @@ Multiple filters can be combined this way:
 #         use uuid::Uuid;
 # 
 #         #[derive(PartialEq, Clone, Debug)]
-#         pub struct User {
+#         pub struct Character {
 #             pub id: Uuid,
 #             pub name: String,
-#             pub is_active: bool,
+#             pub location: String,
 #         }
 # 
-#         impl User {
-#             pub fn new(name: String) -> Self {
+#         impl Character {
+#             pub fn new(name: String, location: String) -> Self {
 #                 Self {
 #                     id: Uuid::new_v4(),
-#                     name: name,
-#                     is_active: true,
+#                     name,
+#                     location,
 #                 }
 #             }
 #         }
@@ -613,25 +613,25 @@ Multiple filters can be combined this way:
 #             .await?;
 # 
 #         sqlx::query(
-#             "create table if not exists users (
+#             "create table if not exists characters (
 #                 id uuid,
 #                 name text,
-#                 is_active boolean
+#                 location text
 #             )"
 #         )
 #         .execute(&pool)
 #         .await?;
-#         sqlx::query("delete from users").execute(&pool).await?;
+#         sqlx::query("delete from characters").execute(&pool).await?;
 # 
 # 
 #         use std::collections::HashMap;
 #         use sea_query::SimpleExpr;
 # 
-#         fn dump_user(u: &User) -> HashMap<String, SimpleExpr> {
+#         fn dump_character(u: &Character) -> HashMap<String, SimpleExpr> {
 #             HashMap::from([
 #                 ("id".to_string(), u.id.into()),
 #                 ("name".to_string(), u.name.clone().into()),
-#                 ("is_active".to_string(), u.is_active.into()),
+#                 ("location".to_string(), u.location.clone().into()),
 #             ])
 #         }
 # 
@@ -639,11 +639,11 @@ Multiple filters can be combined this way:
 #         use sqlx::Row;
 #         use sqlx::postgres::PgRow;
 # 
-#         fn load_user(row: &PgRow) -> User {
-#             User {
+#         fn load_character(row: &PgRow) -> Character {
+#             Character {
 #                 id: row.get("id"),
 #                 name: row.get("name"),
-#                 is_active: row.get("is_active"),
+#                 location: row.get("location"),
 #             }
 #         }
 # 
@@ -651,7 +651,7 @@ Multiple filters can be combined this way:
 #         use orlok::Repo;
 #         use orlok::pg::PgRepo;
 # 
-#         let users_repo = PgRepo::new("users", dump_user, load_user);
+#         let characters_repo = PgRepo::new("characters", dump_character, load_character);
 # 
 # 
 #         use orlok::Db;
@@ -660,26 +660,26 @@ Multiple filters can be combined this way:
 #         let db = PgDb::new(pool);
 # 
 # 
-#         let alice = User::new("Alice".to_string());
-#         users_repo.add(&db, &alice).await?;
-#         let bob = User::new("Bob".to_string());
-#         users_repo.add(&db, &bob).await?;
-#         let eve = User::new("Eve".to_string());
-#         users_repo.add(&db, &eve).await?;
+#         let orlok = Character::new("Orlok".to_string(), "Transylvania".to_string());
+#         characters_repo.add(&db, &orlok).await?;
+#         let thomas = Character::new("Thomas".to_string(), "Wisborg".to_string());
+#         characters_repo.add(&db, &thomas).await?;
+#         let ellen = Character::new("Ellen".to_string(), "Wisborg".to_string());
+#         characters_repo.add(&db, &ellen).await?;
 # 
 # 
 #         use orlok::F;
-let user = users_repo.get(
+let character = characters_repo.get(
     &db,
     &F::and(
         vec![
             F::starts_with("name", "E"),
-            F::ends_with("name", "e")
+            F::ends_with("name", "n")
         ]
     )
 ).await?.unwrap();
 
-assert_eq!(user, eve);
+assert_eq!(character, ellen);
 #         Ok(())
 #     })
 # }
@@ -696,18 +696,18 @@ If you need to load several entities, use the `get_many` method:
 #         use uuid::Uuid;
 # 
 #         #[derive(PartialEq, Clone, Debug)]
-#         pub struct User {
+#         pub struct Character {
 #             pub id: Uuid,
 #             pub name: String,
-#             pub is_active: bool,
+#             pub location: String,
 #         }
 # 
-#         impl User {
-#             pub fn new(name: String) -> Self {
+#         impl Character {
+#             pub fn new(name: String, location: String) -> Self {
 #                 Self {
 #                     id: Uuid::new_v4(),
-#                     name: name,
-#                     is_active: true,
+#                     name,
+#                     location,
 #                 }
 #             }
 #         }
@@ -719,25 +719,25 @@ If you need to load several entities, use the `get_many` method:
 #             .await?;
 # 
 #         sqlx::query(
-#             "create table if not exists users (
+#             "create table if not exists characters (
 #                 id uuid,
 #                 name text,
-#                 is_active boolean
+#                 location text
 #             )"
 #         )
 #         .execute(&pool)
 #         .await?;
-#         sqlx::query("delete from users").execute(&pool).await?;
+#         sqlx::query("delete from characters").execute(&pool).await?;
 # 
 # 
 #         use std::collections::HashMap;
 #         use sea_query::SimpleExpr;
 # 
-#         fn dump_user(u: &User) -> HashMap<String, SimpleExpr> {
+#         fn dump_character(u: &Character) -> HashMap<String, SimpleExpr> {
 #             HashMap::from([
 #                 ("id".to_string(), u.id.into()),
 #                 ("name".to_string(), u.name.clone().into()),
-#                 ("is_active".to_string(), u.is_active.into()),
+#                 ("location".to_string(), u.location.clone().into()),
 #             ])
 #         }
 # 
@@ -745,11 +745,11 @@ If you need to load several entities, use the `get_many` method:
 #         use sqlx::Row;
 #         use sqlx::postgres::PgRow;
 # 
-#         fn load_user(row: &PgRow) -> User {
-#             User {
+#         fn load_character(row: &PgRow) -> Character {
+#             Character {
 #                 id: row.get("id"),
 #                 name: row.get("name"),
-#                 is_active: row.get("is_active"),
+#                 location: row.get("location"),
 #             }
 #         }
 # 
@@ -757,7 +757,7 @@ If you need to load several entities, use the `get_many` method:
 #         use orlok::Repo;
 #         use orlok::pg::PgRepo;
 # 
-#         let users_repo = PgRepo::new("users", dump_user, load_user);
+#         let characters_repo = PgRepo::new("characters", dump_character, load_character);
 # 
 # 
 #         use orlok::Db;
@@ -766,23 +766,23 @@ If you need to load several entities, use the `get_many` method:
 #         let db = PgDb::new(pool);
 # 
 # 
-#         let alice = User::new("Alice".to_string());
-#         users_repo.add(&db, &alice).await?;
-#         let bob = User::new("Bob".to_string());
-#         users_repo.add(&db, &bob).await?;
-#         let eve = User::new("Eve".to_string());
-#         users_repo.add(&db, &eve).await?;
+#         let orlok = Character::new("Orlok".to_string(), "Transylvania".to_string());
+#         characters_repo.add(&db, &orlok).await?;
+#         let thomas = Character::new("Thomas".to_string(), "Wisborg".to_string());
+#         characters_repo.add(&db, &thomas).await?;
+#         let ellen = Character::new("Ellen".to_string(), "Wisborg".to_string());
+#         characters_repo.add(&db, &ellen).await?;
 # 
 # 
 #         use orlok::F;
 use orlok::Query;
 
-let users = users_repo.get_many(
+let characters = characters_repo.get_many(
     &db,
-    &Query::filter(F::ends_with("name", "e"))
+    &Query::filter(F::contains("name", "l"))
 ).await?;
 
-assert_eq!(users, vec![alice.clone(), eve.clone()]);
+assert_eq!(characters, vec![orlok.clone(), ellen.clone()]);
 #         Ok(())
 #     })
 # }
@@ -798,18 +798,18 @@ options for the limit, offset, and order of entities that we want to retrieve:
 #         use uuid::Uuid;
 # 
 #         #[derive(PartialEq, Clone, Debug)]
-#         pub struct User {
+#         pub struct Character {
 #             pub id: Uuid,
 #             pub name: String,
-#             pub is_active: bool,
+#             pub location: String,
 #         }
 # 
-#         impl User {
-#             pub fn new(name: String) -> Self {
+#         impl Character {
+#             pub fn new(name: String, location: String) -> Self {
 #                 Self {
 #                     id: Uuid::new_v4(),
-#                     name: name,
-#                     is_active: true,
+#                     name,
+#                     location,
 #                 }
 #             }
 #         }
@@ -821,25 +821,25 @@ options for the limit, offset, and order of entities that we want to retrieve:
 #             .await?;
 # 
 #         sqlx::query(
-#             "create table if not exists users (
+#             "create table if not exists characters (
 #                 id uuid,
 #                 name text,
-#                 is_active boolean
+#                 location text
 #             )"
 #         )
 #         .execute(&pool)
 #         .await?;
-#         sqlx::query("delete from users").execute(&pool).await?;
+#         sqlx::query("delete from characters").execute(&pool).await?;
 # 
 # 
 #         use std::collections::HashMap;
 #         use sea_query::SimpleExpr;
 # 
-#         fn dump_user(u: &User) -> HashMap<String, SimpleExpr> {
+#         fn dump_character(u: &Character) -> HashMap<String, SimpleExpr> {
 #             HashMap::from([
 #                 ("id".to_string(), u.id.into()),
 #                 ("name".to_string(), u.name.clone().into()),
-#                 ("is_active".to_string(), u.is_active.into()),
+#                 ("location".to_string(), u.location.clone().into()),
 #             ])
 #         }
 # 
@@ -847,11 +847,11 @@ options for the limit, offset, and order of entities that we want to retrieve:
 #         use sqlx::Row;
 #         use sqlx::postgres::PgRow;
 # 
-#         fn load_user(row: &PgRow) -> User {
-#             User {
+#         fn load_character(row: &PgRow) -> Character {
+#             Character {
 #                 id: row.get("id"),
 #                 name: row.get("name"),
-#                 is_active: row.get("is_active"),
+#                 location: row.get("location"),
 #             }
 #         }
 # 
@@ -859,7 +859,7 @@ options for the limit, offset, and order of entities that we want to retrieve:
 #         use orlok::Repo;
 #         use orlok::pg::PgRepo;
 # 
-#         let users_repo = PgRepo::new("users", dump_user, load_user);
+#         let characters_repo = PgRepo::new("characters", dump_character, load_character);
 # 
 # 
 #         use orlok::Db;
@@ -868,19 +868,19 @@ options for the limit, offset, and order of entities that we want to retrieve:
 #         let db = PgDb::new(pool);
 # 
 # 
-#         let alice = User::new("Alice".to_string());
-#         users_repo.add(&db, &alice).await?;
-#         let bob = User::new("Bob".to_string());
-#         users_repo.add(&db, &bob).await?;
-#         let eve = User::new("Eve".to_string());
-#         users_repo.add(&db, &eve).await?;
+#         let orlok = Character::new("Orlok".to_string(), "Transylvania".to_string());
+#         characters_repo.add(&db, &orlok).await?;
+#         let thomas = Character::new("Thomas".to_string(), "Wisborg".to_string());
+#         characters_repo.add(&db, &thomas).await?;
+#         let ellen = Character::new("Ellen".to_string(), "Wisborg".to_string());
+#         characters_repo.add(&db, &ellen).await?;
 # 
 # 
 #         use orlok::F;
 #         use orlok::Query;
 use orlok::Order;
 
-let users = users_repo.get_many(
+let characters = characters_repo.get_many(
     &db,
     &Query::new()
         .order(vec![Order::Desc("name".to_string())])
@@ -888,7 +888,7 @@ let users = users_repo.get_many(
         .offset(1)
 ).await?;
 
-assert_eq!(users, vec![bob.clone(), alice.clone()]);
+assert_eq!(characters, vec![orlok.clone(), ellen.clone()]);
 #         Ok(())
 #     })
 # }
@@ -907,18 +907,18 @@ an appropriate record in the database:
 #         use uuid::Uuid;
 # 
 #         #[derive(PartialEq, Clone, Debug)]
-#         pub struct User {
+#         pub struct Character {
 #             pub id: Uuid,
 #             pub name: String,
-#             pub is_active: bool,
+#             pub location: String,
 #         }
 # 
-#         impl User {
-#             pub fn new(name: String) -> Self {
+#         impl Character {
+#             pub fn new(name: String, location: String) -> Self {
 #                 Self {
 #                     id: Uuid::new_v4(),
-#                     name: name,
-#                     is_active: true,
+#                     name,
+#                     location,
 #                 }
 #             }
 #         }
@@ -930,25 +930,25 @@ an appropriate record in the database:
 #             .await?;
 # 
 #         sqlx::query(
-#             "create table if not exists users (
+#             "create table if not exists characters (
 #                 id uuid,
 #                 name text,
-#                 is_active boolean
+#                 location text
 #             )"
 #         )
 #         .execute(&pool)
 #         .await?;
-#         sqlx::query("delete from users").execute(&pool).await?;
+#         sqlx::query("delete from characters").execute(&pool).await?;
 # 
 # 
 #         use std::collections::HashMap;
 #         use sea_query::SimpleExpr;
 # 
-#         fn dump_user(u: &User) -> HashMap<String, SimpleExpr> {
+#         fn dump_character(u: &Character) -> HashMap<String, SimpleExpr> {
 #             HashMap::from([
 #                 ("id".to_string(), u.id.into()),
 #                 ("name".to_string(), u.name.clone().into()),
-#                 ("is_active".to_string(), u.is_active.into()),
+#                 ("location".to_string(), u.location.clone().into()),
 #             ])
 #         }
 # 
@@ -956,11 +956,11 @@ an appropriate record in the database:
 #         use sqlx::Row;
 #         use sqlx::postgres::PgRow;
 # 
-#         fn load_user(row: &PgRow) -> User {
-#             User {
+#         fn load_character(row: &PgRow) -> Character {
+#             Character {
 #                 id: row.get("id"),
 #                 name: row.get("name"),
-#                 is_active: row.get("is_active"),
+#                 location: row.get("location"),
 #             }
 #         }
 # 
@@ -968,7 +968,7 @@ an appropriate record in the database:
 #         use orlok::Repo;
 #         use orlok::pg::PgRepo;
 # 
-#         let users_repo = PgRepo::new("users", dump_user, load_user);
+#         let characters_repo = PgRepo::new("characters", dump_character, load_character);
 # 
 # 
 #         use orlok::Db;
@@ -977,117 +977,19 @@ an appropriate record in the database:
 #         let db = PgDb::new(pool);
 # 
 # 
-#         let alice = User::new("Alice".to_string());
-#         users_repo.add(&db, &alice).await?;
-#         let bob = User::new("Bob".to_string());
-#         users_repo.add(&db, &bob).await?;
-#         let eve = User::new("Eve".to_string());
-#         users_repo.add(&db, &eve).await?;
+#         let orlok = Character::new("Orlok".to_string(), "Transylvania".to_string());
+#         characters_repo.add(&db, &orlok).await?;
+#         let thomas = Character::new("Thomas".to_string(), "Wisborg".to_string());
+#         characters_repo.add(&db, &thomas).await?;
+#         let ellen = Character::new("Ellen".to_string(), "Wisborg".to_string());
+#         characters_repo.add(&db, &ellen).await?;
 # 
 # 
 #         use orlok::F;
-let mut eve = users_repo.get(&db, &F::eq("name", "Eve")).await?.unwrap();
-eve.is_active = false;
-users_repo.update(&db, &F::eq("id".to_string(), eve.id), &eve).await?;
-#         Ok(())
-#     })
-# }
-```
-
-### Removing an entity
-
-For this we also need a filter:
-
-```rust
-# use tokio_test;
-# fn main() -> anyhow::Result<()> {
-#     tokio_test::block_on(async {
-#         use uuid::Uuid;
-# 
-#         #[derive(PartialEq, Clone, Debug)]
-#         pub struct User {
-#             pub id: Uuid,
-#             pub name: String,
-#             pub is_active: bool,
-#         }
-# 
-#         impl User {
-#             pub fn new(name: String) -> Self {
-#                 Self {
-#                     id: Uuid::new_v4(),
-#                     name: name,
-#                     is_active: true,
-#                 }
-#             }
-#         }
-# 
-# 
-#         use sqlx::PgPool;
-# 
-#         let pool = PgPool::connect("postgresql://orlok:orlok@localhost/orlok")
-#             .await?;
-# 
-#         sqlx::query(
-#             "create table if not exists users (
-#                 id uuid,
-#                 name text,
-#                 is_active boolean
-#             )"
-#         )
-#         .execute(&pool)
-#         .await?;
-#         sqlx::query("delete from users").execute(&pool).await?;
-# 
-# 
-#         use std::collections::HashMap;
-#         use sea_query::SimpleExpr;
-# 
-#         fn dump_user(u: &User) -> HashMap<String, SimpleExpr> {
-#             HashMap::from([
-#                 ("id".to_string(), u.id.into()),
-#                 ("name".to_string(), u.name.clone().into()),
-#                 ("is_active".to_string(), u.is_active.into()),
-#             ])
-#         }
-# 
-# 
-#         use sqlx::Row;
-#         use sqlx::postgres::PgRow;
-# 
-#         fn load_user(row: &PgRow) -> User {
-#             User {
-#                 id: row.get("id"),
-#                 name: row.get("name"),
-#                 is_active: row.get("is_active"),
-#             }
-#         }
-# 
-# 
-#         use orlok::Repo;
-#         use orlok::pg::PgRepo;
-# 
-#         let users_repo = PgRepo::new("users", dump_user, load_user);
-# 
-# 
-#         use orlok::Db;
-#         use orlok::pg::PgDb;
-# 
-#         let db = PgDb::new(pool);
-# 
-# 
-#         let alice = User::new("Alice".to_string());
-#         users_repo.add(&db, &alice).await?;
-#         let bob = User::new("Bob".to_string());
-#         users_repo.add(&db, &bob).await?;
-#         let eve = User::new("Eve".to_string());
-#         users_repo.add(&db, &eve).await?;
-# 
-# 
-#         use orlok::F;
-#         let mut eve = users_repo.get(&db, &F::eq("name", "Eve")).await?.unwrap();
-#         eve.is_active = false;
-#         users_repo.update(&db, &F::eq("id", eve.id), &eve).await?;
-users_repo.delete(&db, &F::eq("is_active", false)).await?;
+let mut orlok = characters_repo.get(&db, &F::eq("name", "Orlok")).await?.unwrap();
+orlok.name = "Count Orlok".to_string();
+characters_repo.update(&db, &F::eq("id", orlok.id), &orlok).await?;
+#         assert!(!characters_repo.exists(&db, &F::eq("name", "Orlok")).await?);
 #         Ok(())
 #     })
 # }
@@ -1104,18 +1006,18 @@ Use a closure to execute code in a transaction and return `Ok` to complete the t
 #         use uuid::Uuid;
 # 
 #         #[derive(PartialEq, Clone, Debug)]
-#         pub struct User {
+#         pub struct Character {
 #             pub id: Uuid,
 #             pub name: String,
-#             pub is_active: bool,
+#             pub location: String,
 #         }
 # 
-#         impl User {
-#             pub fn new(name: String) -> Self {
+#         impl Character {
+#             pub fn new(name: String, location: String) -> Self {
 #                 Self {
 #                     id: Uuid::new_v4(),
-#                     name: name,
-#                     is_active: true,
+#                     name,
+#                     location,
 #                 }
 #             }
 #         }
@@ -1127,25 +1029,25 @@ Use a closure to execute code in a transaction and return `Ok` to complete the t
 #             .await?;
 # 
 #         sqlx::query(
-#             "create table if not exists users (
+#             "create table if not exists characters (
 #                 id uuid,
 #                 name text,
-#                 is_active boolean
+#                 location text
 #             )"
 #         )
 #         .execute(&pool)
 #         .await?;
-#         sqlx::query("delete from users").execute(&pool).await?;
+#         sqlx::query("delete from characters").execute(&pool).await?;
 # 
 # 
 #         use std::collections::HashMap;
 #         use sea_query::SimpleExpr;
 # 
-#         fn dump_user(u: &User) -> HashMap<String, SimpleExpr> {
+#         fn dump_character(u: &Character) -> HashMap<String, SimpleExpr> {
 #             HashMap::from([
 #                 ("id".to_string(), u.id.into()),
 #                 ("name".to_string(), u.name.clone().into()),
-#                 ("is_active".to_string(), u.is_active.into()),
+#                 ("location".to_string(), u.location.clone().into()),
 #             ])
 #         }
 # 
@@ -1153,11 +1055,11 @@ Use a closure to execute code in a transaction and return `Ok` to complete the t
 #         use sqlx::Row;
 #         use sqlx::postgres::PgRow;
 # 
-#         fn load_user(row: &PgRow) -> User {
-#             User {
+#         fn load_character(row: &PgRow) -> Character {
+#             Character {
 #                 id: row.get("id"),
 #                 name: row.get("name"),
-#                 is_active: row.get("is_active"),
+#                 location: row.get("location"),
 #             }
 #         }
 # 
@@ -1165,7 +1067,7 @@ Use a closure to execute code in a transaction and return `Ok` to complete the t
 #         use orlok::Repo;
 #         use orlok::pg::PgRepo;
 # 
-#         let users_repo = PgRepo::new("users", dump_user, load_user);
+#         let characters_repo = PgRepo::new("characters", dump_character, load_character);
 # 
 # 
 #         use orlok::Db;
@@ -1174,33 +1076,36 @@ Use a closure to execute code in a transaction and return `Ok` to complete the t
 #         let db = PgDb::new(pool);
 # 
 # 
-#         let alice = User::new("Alice".to_string());
-#         users_repo.add(&db, &alice).await?;
-#         let bob = User::new("Bob".to_string());
-#         users_repo.add(&db, &bob).await?;
-#         let eve = User::new("Eve".to_string());
-#         users_repo.add(&db, &eve).await?;
+#         let orlok = Character::new("Orlok".to_string(), "Transylvania".to_string());
+#         characters_repo.add(&db, &orlok).await?;
+#         let thomas = Character::new("Thomas".to_string(), "Wisborg".to_string());
+#         characters_repo.add(&db, &thomas).await?;
+#         let ellen = Character::new("Ellen".to_string(), "Wisborg".to_string());
+#         characters_repo.add(&db, &ellen).await?;
 # 
 # 
 #         use orlok::F;
+#         let mut orlok = characters_repo.get(&db, &F::eq("name", "Orlok")).await?.unwrap();
+#         orlok.name = "Count Orlok".to_string();
+#         characters_repo.update(&db, &F::eq("id", orlok.id), &orlok).await?;
 db.transaction(|tx| {
     Box::pin({
-        let users_repo = users_repo.clone();
+        let characters_repo = characters_repo.clone();
         async move {
-            let mut user1 = users_repo.get_for_update(
-                &tx, &F::eq("name", "Alice")
+            let mut thomas = characters_repo.get_for_update(
+                &tx, &F::eq("name", "Thomas")
             ).await?.unwrap();
-            let mut user2 = users_repo.get_for_update(
-                &tx, &F::eq("name", "Bob")
+            let mut orlok = characters_repo.get_for_update(
+                &tx, &F::eq("name", "Count Orlok")
             ).await?.unwrap();
-            user1.name = "Bob".to_string();
-            user2.name = "Alice".to_string();
-            users_repo.update(&tx, &F::eq("id", user1.id), &user1).await?;
-            users_repo.update(&tx, &F::eq("id", user2.id), &user2).await?;
+            thomas.location = "Transylvania".to_string();
+            orlok.location = "Wisborg".to_string();
+            characters_repo.update(&tx, &F::eq("id", thomas.id), &thomas).await?;
+            characters_repo.update(&tx, &F::eq("id", orlok.id), &orlok).await?;
             Ok(())
         }
     })
-});
+}).await?;
 #         Ok(())
 #     })
 # }
@@ -1208,6 +1113,106 @@ db.transaction(|tx| {
 
 Be aware that nested transactions are not supported at the moment.
 
+### Removing an entity
+
+For this we also need a filter:
+
+```rust
+# use tokio_test;
+# fn main() -> anyhow::Result<()> {
+#     tokio_test::block_on(async {
+#         use uuid::Uuid;
+# 
+#         #[derive(PartialEq, Clone, Debug)]
+#         pub struct Character {
+#             pub id: Uuid,
+#             pub name: String,
+#             pub location: String,
+#         }
+# 
+#         impl Character {
+#             pub fn new(name: String, location: String) -> Self {
+#                 Self {
+#                     id: Uuid::new_v4(),
+#                     name,
+#                     location,
+#                 }
+#             }
+#         }
+# 
+# 
+#         use sqlx::PgPool;
+# 
+#         let pool = PgPool::connect("postgresql://orlok:orlok@localhost/orlok")
+#             .await?;
+# 
+#         sqlx::query(
+#             "create table if not exists characters (
+#                 id uuid,
+#                 name text,
+#                 location text
+#             )"
+#         )
+#         .execute(&pool)
+#         .await?;
+#         sqlx::query("delete from characters").execute(&pool).await?;
+# 
+# 
+#         use std::collections::HashMap;
+#         use sea_query::SimpleExpr;
+# 
+#         fn dump_character(u: &Character) -> HashMap<String, SimpleExpr> {
+#             HashMap::from([
+#                 ("id".to_string(), u.id.into()),
+#                 ("name".to_string(), u.name.clone().into()),
+#                 ("location".to_string(), u.location.clone().into()),
+#             ])
+#         }
+# 
+# 
+#         use sqlx::Row;
+#         use sqlx::postgres::PgRow;
+# 
+#         fn load_character(row: &PgRow) -> Character {
+#             Character {
+#                 id: row.get("id"),
+#                 name: row.get("name"),
+#                 location: row.get("location"),
+#             }
+#         }
+# 
+# 
+#         use orlok::Repo;
+#         use orlok::pg::PgRepo;
+# 
+#         let characters_repo = PgRepo::new("characters", dump_character, load_character);
+# 
+# 
+#         use orlok::Db;
+#         use orlok::pg::PgDb;
+# 
+#         let db = PgDb::new(pool);
+# 
+# 
+#         let orlok = Character::new("Orlok".to_string(), "Transylvania".to_string());
+#         characters_repo.add(&db, &orlok).await?;
+#         let thomas = Character::new("Thomas".to_string(), "Wisborg".to_string());
+#         characters_repo.add(&db, &thomas).await?;
+#         let ellen = Character::new("Ellen".to_string(), "Wisborg".to_string());
+#         characters_repo.add(&db, &ellen).await?;
+# 
+# 
+#         use orlok::F;
+#         let mut orlok = characters_repo.get(&db, &F::eq("name", "Orlok")).await?.unwrap();
+#         orlok.name = "Count Orlok".to_string();
+#         characters_repo.update(&db, &F::eq("id", orlok.id), &orlok).await?;
+#         assert!(characters_repo.exists(&db, &F::eq("name", "Count Orlok")).await?);
+characters_repo.delete(&db, &F::eq("name", "Count Orlok")).await?;
+#         assert!(!characters_repo.exists(&db, &F::eq("name", "Count Orlok")).await?);
+#         Ok(())
+#     })
+# }
+```
 
 ### Fast prototyping
 
@@ -1226,26 +1231,26 @@ use orlok::{Repo, Db};
 use orlok::json::{JsonRepo, JsonDb};
 
 #[derive(PartialEq, Clone, Debug, Serialize, Deserialize)]
-pub struct User {
+pub struct Character {
     pub id: Uuid,
     pub name: String,
-    pub is_active: bool,
+    pub location: String,
 }
 
-impl User {
-    pub fn new(name: String) -> Self {
+impl Character {
+    pub fn new(name: String, location: String) -> Self {
         Self {
             id: Uuid::new_v4(),
-            name: name,
-            is_active: true,
+            name,
+            location,
         }
     }
 }
 
-let users_repo = JsonRepo::new("users");
+let characters_repo = JsonRepo::new("characters");
 let db = JsonDb::new();
-let user = User::new("Alice".to_string());
-users_repo.add(&db, &user).await?;
+let character = Character::new("Orlok".to_string(), "Transylvania".to_string());
+characters_repo.add(&db, &character).await?;
 Ok(())
     # })
 # }
