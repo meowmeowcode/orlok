@@ -13,12 +13,14 @@ At the moment only PostgreSQL is supported with the help of
 [sqlx](https://crates.io/crates/sqlx) and [sea_query](https://crates.io/crates/sea-query).
 
 
-<div style="background-color: beige; padding: 14px">
+<div style="background-color: beige; padding: 14px; margin-bottom: 14px">
     This crate was written in the process of learning Rust,
     so if you're an experienced rustacean, don't be surprised
     if some of its parts will look unnatural to you.
 </div>
 
+
+The repository is here: <https://github.com/meowmeowcode/orlok>
 
 ## Guide
 

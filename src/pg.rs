@@ -1,3 +1,4 @@
+//! A repository implementation for PostgreSQL.
 use std::collections::HashMap;
 use std::fmt::Write;
 use std::future::Future;
@@ -18,6 +19,7 @@ use tokio::sync::RwLock;
 use crate::base::{Db, Repo};
 use crate::query::{Op, Order, Query, F};
 
+/// Repository that stores entities in PostgreSQL.
 #[derive(Clone)]
 pub struct PgRepo<T> {
     table: String,
@@ -26,6 +28,7 @@ pub struct PgRepo<T> {
     load: fn(row: &PgRow) -> T,
 }
 
+/// String wrapper that implements the `Iden` trait from `sea_query`.
 pub struct Name(String);
 
 impl Iden for Name {
@@ -394,6 +397,8 @@ where
     }
 }
 
+/// Wrapper around a pool of connections to PostgreSQL
+/// or a transaction.
 pub enum PgDb<'a> {
     Pool(PgPool),
     Transaction(RwLock<sqlx::Transaction<'a, Postgres>>),

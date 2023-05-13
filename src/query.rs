@@ -1,7 +1,9 @@
+//! Structs that can be used for construction of queries.
 use chrono::{DateTime, Utc};
 use rust_decimal::Decimal;
 use uuid::Uuid;
 
+/// [Filter] operations.
 #[derive(Clone, Debug)]
 pub enum Op {
     StrEq(String),
@@ -43,6 +45,7 @@ pub enum Op {
     UuidIn(Vec<Uuid>),
 }
 
+/// Struct for filtering entities.
 #[derive(Clone, Debug)]
 pub enum Filter {
     And(Vec<F>),
@@ -51,48 +54,60 @@ pub enum Filter {
     Value { field: String, op: Op },
 }
 
+/// Alias for the [Filter] struct.
 pub type F = Filter;
 
+/// Argument for the [Filter::eq] method.
 pub trait EqArg {
     fn to_op(self) -> Op;
 }
 
+/// Argument for the [Filter::ne] method.
 pub trait NeArg {
     fn to_op(self) -> Op;
 }
 
+/// Argument for the [Filter::lt] method.
 pub trait LtArg {
     fn to_op(self) -> Op;
 }
 
+/// Argument for the [Filter::lte] method.
 pub trait LteArg {
     fn to_op(self) -> Op;
 }
 
+/// Argument for the [Filter::gt] method.
 pub trait GtArg {
     fn to_op(self) -> Op;
 }
 
+/// Argument for the [Filter::gte] method.
 pub trait GteArg {
     fn to_op(self) -> Op;
 }
 
+/// Argument for the [Filter::between] method.
 pub trait BetweenArg {
     fn to_op(self) -> Op;
 }
 
+/// Argument for the [Filter::in_] method.
 pub trait InArg {
     fn to_op(self) -> Op;
 }
 
+/// Argument for the [Filter::contains] method.
 pub trait ContainsArg {
     fn to_op(self) -> Op;
 }
 
+/// Argument for the [Filter::starts_with] method.
 pub trait StartsWithArg {
     fn to_op(self) -> Op;
 }
 
+/// Argument for the [Filter::ends_with] method.
 pub trait EndsWithArg {
     fn to_op(self) -> Op;
 }
@@ -356,6 +371,7 @@ impl InArg for Vec<Uuid> {
 }
 
 impl Filter {
+    /// Creates a filter to find entities whose field value is equal to a given one.
     pub fn eq(field: impl Into<String>, val: impl EqArg) -> Self {
         Self::Value {
             field: field.into(),
@@ -363,10 +379,12 @@ impl Filter {
         }
     }
 
+    /// Creates a filter to find entities with the `None` field value.
     pub fn is_none(field: impl Into<String>) -> Self {
         Self::IsNone(field.into())
     }
 
+    /// Creates a filter to find entities whose field value is not equal to a given one.
     pub fn ne(field: impl Into<String>, val: impl NeArg) -> Self {
         Self::Value {
             field: field.into(),
@@ -374,6 +392,7 @@ impl Filter {
         }
     }
 
+    /// Creates a filter to find entities whose field value is less than a given one.
     pub fn lt(field: impl Into<String>, val: impl LtArg) -> Self {
         Self::Value {
             field: field.into(),
@@ -381,6 +400,7 @@ impl Filter {
         }
     }
 
+    /// Creates a filter to find entities whose field value is greater than a given one.
     pub fn gt(field: impl Into<String>, val: impl GtArg) -> Self {
         Self::Value {
             field: field.into(),
@@ -388,6 +408,7 @@ impl Filter {
         }
     }
 
+    /// Creates a filter to find entities whose field value is less than or equal to a given one.
     pub fn lte(field: impl Into<String>, val: impl LteArg) -> Self {
         Self::Value {
             field: field.into(),
@@ -395,6 +416,7 @@ impl Filter {
         }
     }
 
+    /// Creates a filter to find entities whose field value is greater than or equal to a given one.
     pub fn gte(field: impl Into<String>, val: impl GteArg) -> Self {
         Self::Value {
             field: field.into(),
@@ -402,6 +424,7 @@ impl Filter {
         }
     }
 
+    /// Creates a filter to find entities whose field value is within a given range.
     pub fn between(field: impl Into<String>, val: impl BetweenArg) -> Self {
         Self::Value {
             field: field.into(),
@@ -409,6 +432,7 @@ impl Filter {
         }
     }
 
+    /// Creates a filter to find entities whose field value is within a given value.
     pub fn in_(field: impl Into<String>, val: impl InArg) -> Self {
         Self::Value {
             field: field.into(),
@@ -416,6 +440,7 @@ impl Filter {
         }
     }
 
+    /// Creates a filter to find entities whose field value has a given value.
     pub fn contains(field: impl Into<String>, val: impl ContainsArg) -> Self {
         Self::Value {
             field: field.into(),
@@ -423,6 +448,7 @@ impl Filter {
         }
     }
 
+    /// Creates a filter to find entities whose field value starts with a given value.
     pub fn starts_with(field: impl Into<String>, val: impl StartsWithArg) -> Self {
         Self::Value {
             field: field.into(),
@@ -430,6 +456,7 @@ impl Filter {
         }
     }
 
+    /// Creates a filter to find entities whose field value ends with a given value.
     pub fn ends_with(field: impl Into<String>, val: impl EndsWithArg) -> Self {
         Self::Value {
             field: field.into(),
@@ -437,32 +464,44 @@ impl Filter {
         }
     }
 
+    /// Creates a filter that joins multiple filters with the AND operator.
     pub fn and(filters: Vec<F>) -> Self {
         Self::And(filters)
     }
 
+    /// Creates a filter that joins multiple filters with the OR operator.
     pub fn or(filters: Vec<F>) -> Self {
         Self::Or(filters)
     }
 }
 
+/// Types of ordering.
 #[derive(Clone, Debug)]
 pub enum Order {
+    /// Ascending ordering. Must contain a name of a field.
     Asc(String),
+    /// Descending ordering. Must contain a name of a field.
     Desc(String),
 }
 
+/// Struct for filtering entities with additional options.
 #[derive(Clone, Debug)]
 pub struct Query {
+    /// [Filter] that entities must match.
     pub filter: Option<F>,
+    /// Maximum number of entities to retrieve.
     pub limit: Option<usize>,
+    /// Result offset.
     pub offset: Option<usize>,
+    /// Order of entities before retrieval.
     pub order: Option<Vec<Order>>,
 }
 
+/// Alias for the [Query] struct.
 pub type Q = Query;
 
 impl Query {
+    /// Creates a new `Query` with all options set to `None`.
     pub fn new() -> Self {
         Self {
             filter: None,
@@ -472,6 +511,7 @@ impl Query {
         }
     }
 
+    /// Sets the `filter` option.
     pub fn filter(filter: F) -> Self {
         Self {
             filter: Some(filter),
@@ -481,16 +521,19 @@ impl Query {
         }
     }
 
+    /// Sets the `limit` option.
     pub fn limit(mut self, limit: usize) -> Self {
         self.limit = Some(limit);
         self
     }
 
+    /// Sets the `offset` option.
     pub fn offset(mut self, offset: usize) -> Self {
         self.offset = Some(offset);
         self
     }
 
+    /// Sets the `order` option.
     pub fn order(mut self, order: Vec<Order>) -> Self {
         self.order = Some(order);
         self

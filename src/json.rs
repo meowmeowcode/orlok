@@ -1,3 +1,4 @@
+//! An in-memory repository implementation.
 use std::cmp::Ordering;
 use std::collections::HashMap;
 use std::future::Future;
@@ -17,6 +18,8 @@ use uuid::Uuid;
 use crate::base::{Db, Repo};
 use crate::query::{Op, Order, Query, F};
 
+/// Repository that stores entities as an in-memory collection
+/// of JSON objects.
 #[derive(Clone)]
 pub struct JsonRepo<T>
 where
@@ -349,8 +352,7 @@ fn vals_cmp(xs: &Vec<&Value>, ys: &Vec<&Value>, fields: &Vec<Order>) -> Ordering
     Ordering::Equal
 }
 
-pub struct JsonTransaction {}
-
+/// Struct that contains a collection of JSON objects.
 pub struct JsonDb<'a> {
     data: RwLock<HashMap<String, Vec<Value>>>,
     phantom: PhantomData<&'a ()>,
