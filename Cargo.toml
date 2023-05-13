@@ -1,8 +1,12 @@
 [package]
 name = "orlok"
+description = "A database toolkit with generic implementations of the Repository pattern."
 version = "0.1.0"
 edition = "2021"
 license = "MIT"
+authors = ["Anton Evdokimov"]
+repository = "https://github.com/meowmeowcode/orlok"
+keywords = ["databases", "postgresql", "repository"]
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
