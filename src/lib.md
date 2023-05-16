@@ -6,14 +6,14 @@
 
 Orlok is a database toolkit that contains reusable generic
 implementations of the [Repository](https://martinfowler.com/eaaCatalog/repository.html) pattern.
-It can help you to separate business logic from data storage details
+It can help you to separate business logic from data-storage details
 and save you from writing some amount of boilerplate code.
 
-At the moment only PostgreSQL is supported with the help of
-[sqlx](https://crates.io/crates/sqlx) and [sea_query](https://crates.io/crates/sea-query).
+At the moment, only PostgreSQL is supported thanks to
+[sqlx](https://crates.io/crates/sqlx).
 
 
-<div style="background-color: beige; padding: 14px; margin-bottom: 14px">
+<div style="color: black; background-color: beige; padding: 14px; margin-bottom: 14px">
     This crate was written in the process of learning Rust,
     so if you're an experienced rustacean, don't be surprised
     if some of its parts will look unnatural to you.
@@ -23,14 +23,6 @@ At the moment only PostgreSQL is supported with the help of
 The repository is here: <https://github.com/meowmeowcode/orlok>
 
 ## Guide
-
-### Installation
-
-```toml
-## Cargo.toml
-[dependencies]
-orlok = "0"
-```
 
 ### Creating a repository
 
@@ -57,7 +49,7 @@ impl Character {
 }
 ```
 
-We're going to store this struct in a database, so
+We're going to store this struct in a database so
 let's create a table for this purpose:
 
 ```rust
@@ -84,7 +76,7 @@ sqlx::query(
 # }
 ```
 
-To save the character struct to the database we need
+To save the character struct to the database, we need
 to somehow map its fields to a table row.
 We can define a function for this.
 This function must return a `HashMap` with keys and values
@@ -100,20 +92,20 @@ that correspond to columns and values in the "characters" table:
 #             pub location: String,
 #         }
 use std::collections::HashMap;
-use sea_query::SimpleExpr;
+use orlok::pg::Value;
 
-fn dump_character(u: &Character) -> HashMap<String, SimpleExpr> {
+fn dump_character(c: &Character) -> HashMap<String, Value> {
     HashMap::from([
-        ("id".to_string(), u.id.into()),
-        ("name".to_string(), u.name.clone().into()),
-        ("location".to_string(), u.location.clone().into()),
+        ("id".to_string(), c.id.into()),
+        ("name".to_string(), c.name.clone().into()),
+        ("location".to_string(), c.location.clone().into()),
     ])
 }
 ```
 
 After saving the character struct to the database,
-we want to be able to load it back,
-so we need a function that maps
+we want to be able to load it back. To do this,
+we need a function that maps
 a database row to the struct:
 
 ```rust
@@ -137,7 +129,7 @@ fn load_character(row: &PgRow) -> Character {
 }
 ```
 
-After this, we can create a repository:
+Then, we can create a repository:
 
 ```rust
 #         use uuid::Uuid;
@@ -149,9 +141,9 @@ After this, we can create a repository:
 #             pub location: String,
 #         }
 #         use std::collections::HashMap;
-#         use sea_query::SimpleExpr;
+#         use orlok::pg::Value;
 # 
-#         fn dump_character(u: &Character) -> HashMap<String, SimpleExpr> {
+#         fn dump_character(u: &Character) -> HashMap<String, Value> {
 #             HashMap::from([
 #                 ("id".to_string(), u.id.into()),
 #                 ("name".to_string(), u.name.clone().into()),
@@ -246,9 +238,9 @@ Now we can save new characters:
 # 
 # 
 #         use std::collections::HashMap;
-#         use sea_query::SimpleExpr;
+#         use orlok::pg::Value;
 # 
-#         fn dump_character(u: &Character) -> HashMap<String, SimpleExpr> {
+#         fn dump_character(u: &Character) -> HashMap<String, Value> {
 #             HashMap::from([
 #                 ("id".to_string(), u.id.into()),
 #                 ("name".to_string(), u.name.clone().into()),
@@ -338,9 +330,9 @@ Use the `get` method if you want to load only one entity from the database:
 # 
 # 
 #         use std::collections::HashMap;
-#         use sea_query::SimpleExpr;
+#         use orlok::pg::Value;
 # 
-#         fn dump_character(u: &Character) -> HashMap<String, SimpleExpr> {
+#         fn dump_character(u: &Character) -> HashMap<String, Value> {
 #             HashMap::from([
 #                 ("id".to_string(), u.id.into()),
 #                 ("name".to_string(), u.name.clone().into()),
@@ -390,7 +382,7 @@ assert_eq!(character, orlok);
 # }
 ```
 
-The result of this method contains an `Option` which is `None` if no record was found:
+The result of this method contains an `Option`, which is `None` if no record was found:
 
 ```rust
 # use tokio_test;
@@ -434,9 +426,9 @@ The result of this method contains an `Option` which is `None` if no record was 
 # 
 # 
 #         use std::collections::HashMap;
-#         use sea_query::SimpleExpr;
+#         use orlok::pg::Value;
 # 
-#         fn dump_character(u: &Character) -> HashMap<String, SimpleExpr> {
+#         fn dump_character(u: &Character) -> HashMap<String, Value> {
 #             HashMap::from([
 #                 ("id".to_string(), u.id.into()),
 #                 ("name".to_string(), u.name.clone().into()),
@@ -487,7 +479,7 @@ assert!(character.is_none());
 
 Note that here we use the `F` struct for filtering entities.
 It has different methods for different conditions.
-For example, if we want to find a character with
+For example, find a character with
 the letter "h" in their name, we can do something like this:
 
 ```rust
@@ -532,9 +524,9 @@ the letter "h" in their name, we can do something like this:
 # 
 # 
 #         use std::collections::HashMap;
-#         use sea_query::SimpleExpr;
+#         use orlok::pg::Value;
 # 
-#         fn dump_character(u: &Character) -> HashMap<String, SimpleExpr> {
+#         fn dump_character(u: &Character) -> HashMap<String, Value> {
 #             HashMap::from([
 #                 ("id".to_string(), u.id.into()),
 #                 ("name".to_string(), u.name.clone().into()),
@@ -627,9 +619,9 @@ Multiple filters can be combined this way:
 # 
 # 
 #         use std::collections::HashMap;
-#         use sea_query::SimpleExpr;
+#         use orlok::pg::Value;
 # 
-#         fn dump_character(u: &Character) -> HashMap<String, SimpleExpr> {
+#         fn dump_character(u: &Character) -> HashMap<String, Value> {
 #             HashMap::from([
 #                 ("id".to_string(), u.id.into()),
 #                 ("name".to_string(), u.name.clone().into()),
@@ -689,7 +681,7 @@ assert_eq!(character, ellen);
 
 ### Loading several entities
 
-If you need to load several entities, use the `get_many` method:
+To load several entities, use the `get_many` method:
 
 ```rust
 # use tokio_test;
@@ -733,9 +725,9 @@ If you need to load several entities, use the `get_many` method:
 # 
 # 
 #         use std::collections::HashMap;
-#         use sea_query::SimpleExpr;
+#         use orlok::pg::Value;
 # 
-#         fn dump_character(u: &Character) -> HashMap<String, SimpleExpr> {
+#         fn dump_character(u: &Character) -> HashMap<String, Value> {
 #             HashMap::from([
 #                 ("id".to_string(), u.id.into()),
 #                 ("name".to_string(), u.name.clone().into()),
@@ -835,9 +827,9 @@ options for the limit, offset, and order of entities that we want to retrieve:
 # 
 # 
 #         use std::collections::HashMap;
-#         use sea_query::SimpleExpr;
+#         use orlok::pg::Value;
 # 
-#         fn dump_character(u: &Character) -> HashMap<String, SimpleExpr> {
+#         fn dump_character(u: &Character) -> HashMap<String, Value> {
 #             HashMap::from([
 #                 ("id".to_string(), u.id.into()),
 #                 ("name".to_string(), u.name.clone().into()),
@@ -898,8 +890,8 @@ assert_eq!(characters, vec![orlok.clone(), ellen.clone()]);
 
 ### Updating an entity
 
-To update an entity we need to modify it and pass its reference
-to the `update` method together with a filter that matches
+To update an entity, we need to modify it and pass its reference
+to the `update` method together with a filter that finds
 an appropriate record in the database:
 
 ```rust
@@ -944,9 +936,9 @@ an appropriate record in the database:
 # 
 # 
 #         use std::collections::HashMap;
-#         use sea_query::SimpleExpr;
+#         use orlok::pg::Value;
 # 
-#         fn dump_character(u: &Character) -> HashMap<String, SimpleExpr> {
+#         fn dump_character(u: &Character) -> HashMap<String, Value> {
 #             HashMap::from([
 #                 ("id".to_string(), u.id.into()),
 #                 ("name".to_string(), u.name.clone().into()),
@@ -999,7 +991,7 @@ characters_repo.update(&db, &F::eq("id", orlok.id), &orlok).await?;
 
 ### Transactions
 
-Use a closure to execute code in a transaction and return `Ok` to complete the transaction or an error to abort it:
+Use a closure to execute code in a transaction. Return `Ok` from the closure to commit the transaction or an error to abort it:
 
 ```rust
 # use tokio_test;
@@ -1043,9 +1035,9 @@ Use a closure to execute code in a transaction and return `Ok` to complete the t
 # 
 # 
 #         use std::collections::HashMap;
-#         use sea_query::SimpleExpr;
+#         use orlok::pg::Value;
 # 
-#         fn dump_character(u: &Character) -> HashMap<String, SimpleExpr> {
+#         fn dump_character(u: &Character) -> HashMap<String, Value> {
 #             HashMap::from([
 #                 ("id".to_string(), u.id.into()),
 #                 ("name".to_string(), u.name.clone().into()),
@@ -1113,11 +1105,11 @@ db.transaction(|tx| {
 # }
 ```
 
-Be aware that nested transactions are not supported at the moment.
+Note that nested transactions are not supported at the moment.
 
 ### Removing an entity
 
-For this we also need a filter:
+For this, we also need a filter:
 
 ```rust
 # use tokio_test;
@@ -1161,9 +1153,9 @@ For this we also need a filter:
 # 
 # 
 #         use std::collections::HashMap;
-#         use sea_query::SimpleExpr;
+#         use orlok::pg::Value;
 # 
-#         fn dump_character(u: &Character) -> HashMap<String, SimpleExpr> {
+#         fn dump_character(u: &Character) -> HashMap<String, Value> {
 #             HashMap::from([
 #                 ("id".to_string(), u.id.into()),
 #                 ("name".to_string(), u.name.clone().into()),
@@ -1219,7 +1211,7 @@ characters_repo.delete(&db, &F::eq("name", "Count Orlok")).await?;
 ### Fast prototyping
 
 If you don't have time to think about a database schema
-but want to try some ideas
+but want to try out some ideas,
 you can use an alternative repository implementation
 that stores records in memory as a collection of JSON objects.
 

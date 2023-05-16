@@ -1,4 +1,4 @@
-//! The main traits are here.
+//! Main traits are here.
 use std::future::Future;
 use std::pin::Pin;
 
@@ -10,7 +10,7 @@ use crate::query::{Query, F};
 /// Trait that must be implemented for a repository.
 #[async_trait]
 pub trait Repo<T> {
-    /// Type of a wrapper of a connection to a database.
+    /// Type of a database-connection wrapper.
     type Db<'a>;
     /// Finds an entity and returns it.
     /// Returns `None` if the entity is missing.
@@ -34,7 +34,7 @@ pub trait Repo<T> {
         -> Result<Option<T>>;
 }
 
-/// Trait that must be implemented for a wrapper of a connection to a database.
+/// Trait that must be implemented for a database-connection wrapper.
 #[async_trait]
 pub trait Db {
     async fn transaction<A, T>(&self, action: A) -> Result<T>

@@ -1,4 +1,4 @@
-//! Structs that can be used for construction of queries.
+//! Structs that can be used for building queries.
 use chrono::{DateTime, Utc};
 use rust_decimal::Decimal;
 use uuid::Uuid;
@@ -478,16 +478,16 @@ impl Filter {
 /// Types of ordering.
 #[derive(Clone, Debug)]
 pub enum Order {
-    /// Ascending ordering. Must contain a name of a field.
+    /// Ascending, must contain a field name.
     Asc(String),
-    /// Descending ordering. Must contain a name of a field.
+    /// Descending, must contain a field name.
     Desc(String),
 }
 
 /// Struct for filtering entities with additional options.
 #[derive(Clone, Debug)]
 pub struct Query {
-    /// [Filter] that entities must match.
+    /// [Filter] to search for entities.
     pub filter: Option<F>,
     /// Maximum number of entities to retrieve.
     pub limit: Option<usize>,

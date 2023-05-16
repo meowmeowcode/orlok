@@ -1,4 +1,4 @@
-//! An in-memory repository implementation.
+//! In-memory repository implementation.
 use std::cmp::Ordering;
 use std::collections::HashMap;
 use std::future::Future;
