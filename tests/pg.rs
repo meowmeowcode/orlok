@@ -2,17 +2,16 @@ mod common;
 
 use std::collections::HashMap;
 
-use sea_query::SimpleExpr;
 use sqlx::postgres::PgRow;
 use sqlx::{PgPool, Row};
 
 use orlok::base::{Db, Repo};
-use orlok::pg::{PgDb, PgRepo};
+use orlok::pg::{PgDb, PgRepo, Value};
 use orlok::query::{Order, F, Q};
 
 use common::User;
 
-fn dump_user(entity: &User) -> HashMap<String, SimpleExpr> {
+fn dump_user(entity: &User) -> HashMap<String, Value> {
     HashMap::from([
         ("id".to_string(), entity.id.into()),
         ("name".to_string(), entity.name.clone().into()),

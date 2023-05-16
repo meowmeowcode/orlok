@@ -1,53 +1,153 @@
 //! A repository implementation for PostgreSQL.
+use chrono::DateTime;
+use chrono::Utc;
+use rust_decimal::Decimal;
 use std::collections::HashMap;
-use std::fmt::Write;
+use uuid::Uuid;
+
 use std::future::Future;
 use std::pin::Pin;
 
 use anyhow::{bail, Result};
 use async_trait::async_trait;
-use sea_query::backend::PostgresQueryBuilder;
-use sea_query::{Alias, Expr, Iden, LockType};
-use sea_query::{
-    Condition, IntoCondition, Order as SeaOrder, Query as SeaQuery, SelectStatement, SimpleExpr,
-};
-use sea_query_binder::SqlxBinder;
+
 use sqlx::postgres::PgRow;
-use sqlx::{PgExecutor, PgPool, Postgres, Row};
+use sqlx::{PgExecutor, PgPool, Postgres, QueryBuilder, Row};
 use tokio::sync::RwLock;
 
 use crate::base::{Db, Repo};
 use crate::query::{Op, Order, Query, F};
 
+/// Value that can be saved to a database.
+pub enum Value {
+    Str(String),
+    Int8(i8),
+    Int16(i16),
+    Int32(i32),
+    Int64(i64),
+    Float32(f32),
+    Float64(f64),
+    Bool(bool),
+    Decimal(Decimal),
+    Uuid(Uuid),
+    DateTime(DateTime<Utc>),
+    Null,
+}
+
+impl Value {
+    fn push_to(&self, builder: &mut QueryBuilder<Postgres>) {
+        match self {
+            Self::Str(val) => builder.push_bind(val.clone()),
+            Self::Int8(val) => builder.push_bind(*val),
+            Self::Int16(val) => builder.push_bind(*val),
+            Self::Int32(val) => builder.push_bind(*val),
+            Self::Int64(val) => builder.push_bind(*val),
+            Self::Float32(val) => builder.push_bind(*val),
+            Self::Float64(val) => builder.push_bind(*val),
+            Self::Bool(val) => builder.push_bind(*val),
+            Self::Decimal(val) => builder.push_bind(*val),
+            Self::Uuid(val) => builder.push_bind(*val),
+            Self::DateTime(val) => builder.push_bind(*val),
+            Self::Null => builder.push("null"),
+        };
+    }
+}
+
+impl From<String> for Value {
+    fn from(value: String) -> Self {
+        Self::Str(value)
+    }
+}
+
+impl From<i8> for Value {
+    fn from(value: i8) -> Self {
+        Self::Int8(value)
+    }
+}
+
+impl From<i16> for Value {
+    fn from(value: i16) -> Self {
+        Self::Int16(value)
+    }
+}
+
+impl From<i32> for Value {
+    fn from(value: i32) -> Self {
+        Self::Int32(value)
+    }
+}
+
+impl From<i64> for Value {
+    fn from(value: i64) -> Self {
+        Self::Int64(value)
+    }
+}
+
+impl From<bool> for Value {
+    fn from(value: bool) -> Self {
+        Self::Bool(value)
+    }
+}
+
+impl From<f32> for Value {
+    fn from(value: f32) -> Self {
+        Self::Float32(value)
+    }
+}
+
+impl From<f64> for Value {
+    fn from(value: f64) -> Self {
+        Self::Float64(value)
+    }
+}
+
+impl From<Decimal> for Value {
+    fn from(value: Decimal) -> Self {
+        Self::Decimal(value)
+    }
+}
+
+impl From<Uuid> for Value {
+    fn from(value: Uuid) -> Self {
+        Self::Uuid(value)
+    }
+}
+
+impl From<DateTime<Utc>> for Value {
+    fn from(value: DateTime<Utc>) -> Self {
+        Self::DateTime(value)
+    }
+}
+
+impl<T> From<Option<T>> for Value
+where
+    T: Into<Value>,
+{
+    fn from(value: Option<T>) -> Self {
+        match value {
+            None => Self::Null,
+            Some(value) => value.into(),
+        }
+    }
+}
+
 /// Repository that stores entities in PostgreSQL.
 #[derive(Clone)]
 pub struct PgRepo<T> {
     table: String,
-    query: fn(table: &String) -> SelectStatement,
-    dump: fn(entity: &T) -> HashMap<String, SimpleExpr>,
+    query: fn(table: &String) -> String,
+    dump: fn(entity: &T) -> HashMap<String, Value>,
     load: fn(row: &PgRow) -> T,
 }
 
-/// String wrapper that implements the `Iden` trait from `sea_query`.
-pub struct Name(String);
-
-impl Iden for Name {
-    fn unquoted(&self, s: &mut dyn Write) {
-        write!(s, "{}", self.0).unwrap();
-    }
-}
-
-fn default_query(table: &String) -> SelectStatement {
-    SeaQuery::select()
-        .expr(Expr::asterisk())
-        .from(Name(table.to_string()))
-        .to_owned()
+fn default_query(table: &String) -> String {
+    format!("select * from {}", table)
 }
 
 impl<T> PgRepo<T> {
     pub fn new(
         table: impl Into<String>,
-        dump: fn(entity: &T) -> HashMap<String, SimpleExpr>,
+        dump: fn(entity: &T) -> HashMap<String, Value>,
         load: fn(row: &PgRow) -> T,
     ) -> Self {
         Self {
@@ -58,71 +158,180 @@ impl<T> PgRepo<T> {
         }
     }
 
-    fn apply_filter(&self, query: &mut sea_query::SelectStatement, filter: &F) {
-        let cond = Self::filter_to_cond(filter);
-        query.cond_where(cond);
+    fn apply_filter(&self, builder: &mut QueryBuilder<Postgres>, filter: &F) {
+        builder.push(" where ");
+        self.add_condition(builder, filter);
     }
 
-    fn filter_to_cond(filter: &F) -> Condition {
+    fn add_condition(&self, builder: &mut QueryBuilder<Postgres>, filter: &F) {
         match filter {
             F::And(filters) => {
-                let mut cond = Condition::all();
-                for filter in filters {
-                    cond = cond.add(Self::filter_to_cond(&filter));
+                builder.push("(");
+                for (n, filter) in filters.iter().enumerate() {
+                    if n != 0 {
+                        builder.push(" and ");
+                    }
+                    self.add_condition(builder, filter);
                 }
-                cond
+                builder.push(")");
             }
             F::Or(filters) => {
-                let mut cond = Condition::any();
-                for filter in filters {
-                    cond = cond.add(Self::filter_to_cond(&filter));
+                builder.push("(");
+                for (n, filter) in filters.iter().enumerate() {
+                    if n != 0 {
+                        builder.push(" or ");
+                    }
+                    self.add_condition(builder, filter);
                 }
-                cond
+                builder.push(")");
             }
-            F::IsNone(field) => Expr::col(Name(field.clone())).is_null().into_condition(),
-            F::Value { field, op } => {
-                let col = Expr::col(Name(field.to_string()));
-                match op {
-                    Op::StrEq(val) => col.eq(val),
-                    Op::StrNe(val) => col.ne(val),
-                    Op::StrContains(val) => col.like(format!("%{}%", val)),
-                    Op::StrStartsWith(val) => col.like(format!("{}%", val)),
-                    Op::StrEndsWith(val) => col.like(format!("%{}", val)),
-                    Op::StrIn(values) => col.is_in(values),
-                    Op::IntEq(val) => col.eq(*val),
-                    Op::IntNe(val) => col.ne(*val),
-                    Op::IntLt(val) => col.lt(*val),
-                    Op::IntGt(val) => col.gt(*val),
-                    Op::IntLte(val) => col.lte(*val),
-                    Op::IntGte(val) => col.gte(*val),
-                    Op::IntBetween(x, y) => col.between(*x, *y),
-                    Op::IntIn(values) => col.is_in(values.to_owned()),
-                    Op::BoolEq(val) => col.eq(*val),
-                    Op::BoolNe(val) => col.ne(*val),
-                    Op::FloatEq(val) => col.eq(*val),
-                    Op::FloatNe(val) => col.ne(*val),
-                    Op::FloatLt(val) => col.lt(*val),
-                    Op::FloatGt(val) => col.gt(*val),
-                    Op::FloatLte(val) => col.lte(*val),
-                    Op::FloatGte(val) => col.gte(*val),
-                    Op::DateTimeEq(val) => col.eq(*val),
-                    Op::DateTimeNe(val) => col.ne(*val),
-                    Op::DateTimeLt(val) => col.lt(*val),
-                    Op::DateTimeGt(val) => col.gt(*val),
-                    Op::DateTimeLte(val) => col.lte(*val),
-                    Op::DateTimeGte(val) => col.gte(*val),
-                    Op::DecimalEq(val) => col.eq(*val),
-                    Op::DecimalNe(val) => col.ne(*val),
-                    Op::DecimalLt(val) => col.lt(*val),
-                    Op::DecimalGt(val) => col.gt(*val),
-                    Op::DecimalLte(val) => col.lte(*val),
-                    Op::DecimalGte(val) => col.gte(*val),
-                    Op::UuidEq(val) => col.eq(*val),
-                    Op::UuidNe(val) => col.ne(*val),
-                    Op::UuidIn(values) => col.is_in(values.iter().map(|x| *x)),
+            F::IsNone(field) => {
+                builder.push(field).push(" is null");
+            }
+            F::Value { field, op } => match op {
+                Op::StrEq(val) => {
+                    builder.push(field).push(" = ").push_bind(val.clone());
                 }
-                .into_condition()
-            }
+                Op::StrNe(val) => {
+                    builder.push(field).push(" != ").push_bind(val.clone());
+                }
+                Op::StrContains(val) => {
+                    builder
+                        .push(field)
+                        .push(" like '%' || ")
+                        .push_bind(val.clone())
+                        .push(" || '%' ");
+                }
+                Op::StrStartsWith(val) => {
+                    builder
+                        .push(field)
+                        .push(" like ")
+                        .push_bind(val.clone())
+                        .push(" || '%' ");
+                }
+                Op::StrEndsWith(val) => {
+                    builder
+                        .push(field)
+                        .push(" like '%' || ")
+                        .push_bind(val.clone());
+                }
+                Op::StrIn(values) => {
+                    builder.push(field).push(" in (");
+                    let mut sep = builder.separated(", ");
+                    for v in values {
+                        sep.push_bind(v.clone());
+                    }
+                    builder.push(")");
+                }
+                Op::IntEq(val) => {
+                    builder.push(field).push(" = ").push_bind(val.clone());
+                }
+                Op::IntNe(val) => {
+                    builder.push(field).push(" != ").push_bind(val.clone());
+                }
+                Op::IntLt(val) => {
+                    builder.push(field).push(" < ").push_bind(val.clone());
+                }
+                Op::IntGt(val) => {
+                    builder.push(field).push(" > ").push_bind(val.clone());
+                }
+                Op::IntLte(val) => {
+                    builder.push(field).push(" <= ").push_bind(val.clone());
+                }
+                Op::IntGte(val) => {
+                    builder.push(field).push(" >= ").push_bind(val.clone());
+                }
+                Op::IntBetween(x, y) => {
+                    builder
+                        .push(field)
+                        .push(" between ")
+                        .push_bind(x.clone())
+                        .push(" and ")
+                        .push_bind(y.clone());
+                }
+                Op::IntIn(values) => {
+                    builder.push(field).push(" in (");
+                    let mut sep = builder.separated(", ");
+                    for v in values {
+                        sep.push_bind(v.clone());
+                    }
+                    builder.push(")");
+                }
+                Op::BoolEq(val) => {
+                    builder.push(field).push(" = ").push_bind(val.clone());
+                }
+                Op::BoolNe(val) => {
+                    builder.push(field).push(" != ").push_bind(val.clone());
+                }
+                Op::FloatEq(val) => {
+                    builder.push(field).push(" = ").push_bind(val.clone());
+                }
+                Op::FloatNe(val) => {
+                    builder.push(field).push(" != ").push_bind(val.clone());
+                }
+                Op::FloatLt(val) => {
+                    builder.push(field).push(" < ").push_bind(val.clone());
+                }
+                Op::FloatGt(val) => {
+                    builder.push(field).push(" > ").push_bind(val.clone());
+                }
+                Op::FloatLte(val) => {
+                    builder.push(field).push(" <= ").push_bind(val.clone());
+                }
+                Op::FloatGte(val) => {
+                    builder.push(field).push(" >= ").push_bind(val.clone());
+                }
+                Op::DateTimeEq(val) => {
+                    builder.push(field).push(" = ").push_bind(val.clone());
+                }
+                Op::DateTimeNe(val) => {
+                    builder.push(field).push(" != ").push_bind(val.clone());
+                }
+                Op::DateTimeLt(val) => {
+                    builder.push(field).push(" < ").push_bind(val.clone());
+                }
+                Op::DateTimeGt(val) => {
+                    builder.push(field).push(" > ").push_bind(val.clone());
+                }
+                Op::DateTimeLte(val) => {
+                    builder.push(field).push(" <= ").push_bind(val.clone());
+                }
+                Op::DateTimeGte(val) => {
+                    builder.push(field).push(" >= ").push_bind(val.clone());
+                }
+                Op::DecimalEq(val) => {
+                    builder.push(field).push(" = ").push_bind(val.clone());
+                }
+                Op::DecimalNe(val) => {
+                    builder.push(field).push(" != ").push_bind(val.clone());
+                }
+                Op::DecimalLt(val) => {
+                    builder.push(field).push(" < ").push_bind(val.clone());
+                }
+                Op::DecimalGt(val) => {
+                    builder.push(field).push(" > ").push_bind(val.clone());
+                }
+                Op::DecimalLte(val) => {
+                    builder.push(field).push(" <= ").push_bind(val.clone());
+                }
+                Op::DecimalGte(val) => {
+                    builder.push(field).push(" >= ").push_bind(val.clone());
+                }
+                Op::UuidEq(val) => {
+                    builder.push(field).push(" = ").push_bind(val.clone());
+                }
+                Op::UuidNe(val) => {
+                    builder.push(field).push(" != ").push_bind(val.clone());
+                }
+                Op::UuidIn(values) => {
+                    builder.push(field).push(" in (");
+                    let mut sep = builder.separated(", ");
+                    for v in values {
+                        sep.push_bind(v.clone());
+                    }
+                    builder.push(")");
+                }
+            },
         }
     }
 
@@ -132,16 +341,15 @@ impl<T> PgRepo<T> {
         filter: &F,
         for_update: bool,
     ) -> Result<Option<T>> {
-        let (sql, values) = {
-            let mut query = (self.query)(&self.table);
-            self.apply_filter(&mut query, filter);
-            if for_update {
-                query.lock(LockType::Update);
-            }
-            query.build_sqlx(PostgresQueryBuilder)
-        };
+        let mut builder: QueryBuilder<Postgres> = QueryBuilder::new((self.query)(&self.table));
+        self.apply_filter(&mut builder, filter);
 
-        let result = sqlx::query_with(&sql, values).fetch_one(executor).await;
+        if for_update {
+            builder.push(" for update");
+        }
+
+        let query = builder.build();
+        let result = query.fetch_one(executor).await;
 
         match result {
             Ok(row) => Ok(Some((self.load)(&row))),
@@ -151,37 +359,36 @@ impl<T> PgRepo<T> {
     }
 
     async fn get_many_via(&self, executor: impl PgExecutor<'_>, query: &Query) -> Result<Vec<T>> {
-        let (sql, values) = {
-            let mut sql = (self.query)(&self.table);
+        let mut builder: QueryBuilder<Postgres> = QueryBuilder::new((self.query)(&self.table));
 
-            if let Some(filter) = &query.filter {
-                self.apply_filter(&mut sql, filter);
+        if let Some(filter) = &query.filter {
+            self.apply_filter(&mut builder, &filter);
+        }
+
+        if let Some(limit) = query.limit {
+            builder.push(" limit ").push_bind(limit as i64);
+        }
+
+        if let Some(offset) = query.offset {
+            builder.push(" offset ").push_bind(offset as i64);
+        }
+
+        if let Some(order) = &query.order {
+            builder.push(" order by ");
+            for order_item in order.iter() {
+                match order_item {
+                    Order::Asc(field) => {
+                        builder.push(field).push(" asc ");
+                    }
+                    Order::Desc(field) => {
+                        builder.push(field).push(" desc ");
+                    }
+                }
             }
+        }
 
-            if let Some(limit) = query.limit {
-                sql.limit(limit as u64);
-            }
-
-            if let Some(offset) = query.offset {
-                sql.offset(offset as u64);
-            }
-
-            if let Some(order) = &query.order {
-                sql.order_by_columns(
-                    order
-                        .iter()
-                        .map(|x| match x {
-                            Order::Asc(field) => (Name(field.to_string()), SeaOrder::Asc),
-                            Order::Desc(field) => (Name(field.to_string()), SeaOrder::Desc),
-                        })
-                        .collect::<Vec<(Name, SeaOrder)>>(),
-                );
-            }
-
-            sql.build_sqlx(PostgresQueryBuilder)
-        };
-
-        let result = sqlx::query_with(&sql, values).fetch_all(executor).await;
+        let query = builder.build();
+        let result = query.fetch_all(executor).await;
 
         match result {
             Ok(rows) => Ok(rows.iter().map(self.load).collect()),
@@ -195,65 +402,64 @@ impl<T> PgRepo<T> {
         filter: &F,
         entity: &T,
     ) -> Result<()> {
-        let (sql, values) = {
-            let data = (self.dump)(entity);
+        let mut builder: QueryBuilder<Postgres> = QueryBuilder::new("update ");
+        builder.push(&self.table);
+        builder.push(" set ");
 
-            SeaQuery::update()
-                .table(Name(self.table.clone()))
-                .values(
-                    data.into_iter()
-                        .map(|(k, v)| (Name(k.clone()), SimpleExpr::from(v))),
-                )
-                .cond_where(Self::filter_to_cond(filter))
-                .to_owned()
-                .build_sqlx(PostgresQueryBuilder)
-        };
+        let data = (self.dump)(entity);
 
-        sqlx::query_with(&sql, values).execute(executor).await?;
+        for (n, (key, value)) in data.iter().enumerate() {
+            if n != 0 {
+                builder.push(", ");
+            }
+            builder.push(key).push(" = ");
+            value.push_to(&mut builder);
+        }
+
+        self.apply_filter(&mut builder, filter);
+        let query = builder.build();
+        query.execute(executor).await?;
         Ok(())
     }
 
     async fn delete_via(&self, executor: impl PgExecutor<'_>, filter: &F) -> Result<()> {
-        let (sql, values) = {
-            let mut sql = SeaQuery::delete()
-                .from_table(Name(self.table.clone()))
-                .to_owned();
-            sql.cond_where(Self::filter_to_cond(filter));
-            sql.build_sqlx(PostgresQueryBuilder)
-        };
-
-        sqlx::query_with(&sql, values).execute(executor).await?;
+        let mut builder: QueryBuilder<Postgres> = QueryBuilder::new("delete from ");
+        builder.push(&self.table);
+        self.apply_filter(&mut builder, filter);
+        let query = builder.build();
+        query.execute(executor).await?;
         Ok(())
     }
 
     async fn add_via(&self, executor: impl PgExecutor<'_>, entity: &T) -> Result<()> {
-        let (sql, values) = {
-            let data = (self.dump)(entity);
-            let keys: Vec<Name> = data.keys().map(|k| Name(k.clone())).collect();
-
-            SeaQuery::insert()
-                .into_table(Name(self.table.clone()))
-                .columns(keys)
-                .values_panic(data.into_values())
-                .to_owned()
-                .build_sqlx(PostgresQueryBuilder)
-        };
-
-        sqlx::query_with(&sql, values).execute(executor).await?;
+        let data = (self.dump)(entity);
+        let mut builder: QueryBuilder<Postgres> = QueryBuilder::new("insert into ");
+        builder.push(&self.table);
+        builder.push(" (");
+        let mut separated = builder.separated(", ");
+        for key in data.keys() {
+            separated.push(key);
+        }
+        builder.push(") values (");
+        for (n, val) in data.values().enumerate() {
+            if n > 0 {
+                builder.push(", ");
+            }
+            val.push_to(&mut builder);
+        }
+        builder.push(")");
+        let query = builder.build();
+        query.execute(executor).await?;
         Ok(())
     }
 
     async fn exists_via(&self, executor: impl PgExecutor<'_>, filter: &F) -> Result<bool> {
-        let (sql, values) = {
-            let mut inner_query = (self.query)(&self.table);
-            self.apply_filter(&mut inner_query, filter);
-            let query = SeaQuery::select()
-                .expr_as(Expr::exists(inner_query), Alias::new("result"))
-                .to_owned();
-            query.build_sqlx(PostgresQueryBuilder)
-        };
-
-        let result = sqlx::query_with(&sql, values).fetch_one(executor).await;
+        let mut builder: QueryBuilder<Postgres> = QueryBuilder::new("select exists (");
+        builder.push((self.query)(&self.table));
+        self.apply_filter(&mut builder, filter);
+        builder.push(") as result");
+        let query = builder.build();
+        let result = query.fetch_one(executor).await;
 
         match result {
             Ok(row) => Ok(row.get("result")),
@@ -262,17 +468,13 @@ impl<T> PgRepo<T> {
     }
 
     async fn count_via(&self, executor: impl PgExecutor<'_>, filter: &F) -> Result<i64> {
-        let (sql, values) = {
-            let mut inner_query = (self.query)(&self.table);
-            self.apply_filter(&mut inner_query, filter);
-            let query = SeaQuery::select()
-                .expr_as(Expr::count(Expr::asterisk()), Alias::new("result"))
-                .from_subquery(inner_query, Alias::new("q1"))
-                .to_owned();
-            query.build_sqlx(PostgresQueryBuilder)
-        };
-
-        let result = sqlx::query_with(&sql, values).fetch_one(executor).await;
+        let mut builder: QueryBuilder<Postgres> =
+            QueryBuilder::new("select count(1) as result from (");
+        builder.push((self.query)(&self.table));
+        self.apply_filter(&mut builder, filter);
+        builder.push(") as q");
+        let query = builder.build();
+        let result = query.fetch_one(executor).await;
 
         match result {
             Ok(row) => Ok(row.get("result")),
@@ -281,16 +483,11 @@ impl<T> PgRepo<T> {
     }
 
     async fn count_all_via(&self, executor: impl PgExecutor<'_>) -> Result<i64> {
-        let (sql, values) = {
-            let inner_query = (self.query)(&self.table);
-            let query = SeaQuery::select()
-                .expr_as(Expr::count(Expr::asterisk()), Alias::new("result"))
-                .from_subquery(inner_query, Alias::new("q1"))
-                .to_owned();
-            query.build_sqlx(PostgresQueryBuilder)
-        };
-
-        let result = sqlx::query_with(&sql, values).fetch_one(executor).await;
+        let mut builder: QueryBuilder<Postgres> =
+            QueryBuilder::new("select count(1) as result from (");
+        builder.push((self.query)(&self.table)).push(") as q");
+        let query = builder.build();
+        let result = query.fetch_one(executor).await;
 
         match result {
             Ok(row) => Ok(row.get("result")),
