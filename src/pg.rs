@@ -12,7 +12,7 @@ use anyhow::{bail, Result};
 use async_trait::async_trait;
 
 use sqlx::postgres::PgRow;
-use sqlx::{PgExecutor, PgPool, Postgres, QueryBuilder, Row};
+use sqlx::{PgConnection, PgPool, Postgres, QueryBuilder, Row};
 use tokio::sync::RwLock;
 
 use crate::base::{Db, Repo};
@@ -131,17 +131,20 @@ where
     }
 }
 
+use sqlx::database::HasArguments;
+// type PgQuery<'a> = sqlx::query::Query<'a, Postgres, Postgres>;
+type PgQuery<'a> = sqlx::query::Query<'a, Postgres, <Postgres as HasArguments<'a>>::Arguments>;
+
 /// Repository that stores entities in PostgreSQL.
 #[derive(Clone)]
 pub struct PgRepo<T> {
     table: String,
-    query: fn(table: &String) -> String,
+    query: String,
     dump: fn(entity: &T) -> HashMap<String, Value>,
     load: fn(row: &PgRow) -> T,
-}
-
-fn default_query(table: &String) -> String {
-    format!("select * from {}", table)
+    after_add_hook: Option<fn(&T) -> Vec<PgQuery>>,
+    after_update_hook: Option<fn(&T) -> Vec<PgQuery>>,
+    after_delete_hook: Option<fn(&F) -> Vec<PgQuery>>,
 }
 
 impl<T> PgRepo<T> {
@@ -150,12 +153,45 @@ impl<T> PgRepo<T> {
         dump: fn(entity: &T) -> HashMap<String, Value>,
         load: fn(row: &PgRow) -> T,
     ) -> Self {
+        let table: String = table.into();
+        let query = format!("select * from {}", table);
+
         Self {
-            table: table.into(),
+            table,
             dump,
             load,
-            query: default_query,
+            query,
+            after_add_hook: None,
+            after_update_hook: None,
+            after_delete_hook: None,
         }
+    }
+
+    /// Sets a query to select records from a database.
+    pub fn query(mut self, query: impl Into<String>) -> Self {
+        self.query = query.into();
+        self
+    }
+
+    /// Sets a function that returns a vector of queries
+    /// to execute after a new entity is saved to a database.
+    pub fn after_add(mut self, hook: fn(&T) -> Vec<PgQuery>) -> Self {
+        self.after_add_hook = Some(hook);
+        self
+    }
+
+    /// Sets a function that returns a vector of queries
+    /// to execute after an updated entity is saved to a database.
+    pub fn after_update(mut self, hook: fn(&T) -> Vec<PgQuery>) -> Self {
+        self.after_update_hook = Some(hook);
+        self
+    }
+
+    /// Sets a function that returns a vector of queries
+    /// to execute after an entity is deleted from a database.
+    pub fn after_delete(mut self, hook: fn(&F) -> Vec<PgQuery>) -> Self {
+        self.after_delete_hook = Some(hook);
+        self
     }
 
     fn apply_filter(&self, builder: &mut QueryBuilder<Postgres>, filter: &F) {
@@ -335,17 +371,13 @@ impl<T> PgRepo<T> {
         }
     }
 
-    fn get_query(&self) -> String {
-        (self.query)(&self.table)
-    }
-
     async fn get_via(
         &self,
-        executor: impl PgExecutor<'_>,
+        conn: &mut PgConnection,
         filter: &F,
         for_update: bool,
     ) -> Result<Option<T>> {
-        let mut builder: QueryBuilder<Postgres> = QueryBuilder::new(self.get_query());
+        let mut builder: QueryBuilder<Postgres> = QueryBuilder::new(self.query.clone());
         self.apply_filter(&mut builder, filter);
 
         if for_update {
@@ -353,7 +385,7 @@ impl<T> PgRepo<T> {
         }
 
         let query = builder.build();
-        let result = query.fetch_one(executor).await;
+        let result = query.fetch_one(&mut *conn).await;
 
         match result {
             Ok(row) => Ok(Some((self.load)(&row))),
@@ -362,8 +394,8 @@ impl<T> PgRepo<T> {
         }
     }
 
-    async fn get_many_via(&self, executor: impl PgExecutor<'_>, query: &Query) -> Result<Vec<T>> {
-        let mut builder: QueryBuilder<Postgres> = QueryBuilder::new(self.get_query());
+    async fn get_many_via(&self, conn: &mut PgConnection, query: &Query) -> Result<Vec<T>> {
+        let mut builder: QueryBuilder<Postgres> = QueryBuilder::new(self.query.clone());
 
         if let Some(filter) = &query.filter {
             self.apply_filter(&mut builder, &filter);
@@ -395,7 +427,7 @@ impl<T> PgRepo<T> {
         }
 
         let query = builder.build();
-        let result = query.fetch_all(executor).await;
+        let result = query.fetch_all(&mut *conn).await;
 
         match result {
             Ok(rows) => Ok(rows.iter().map(self.load).collect()),
@@ -403,12 +435,7 @@ impl<T> PgRepo<T> {
         }
     }
 
-    async fn update_via(
-        &self,
-        executor: impl PgExecutor<'_>,
-        filter: &F,
-        entity: &T,
-    ) -> Result<()> {
+    async fn update_via(&self, conn: &mut PgConnection, filter: &F, entity: &T) -> Result<()> {
         let mut builder: QueryBuilder<Postgres> = QueryBuilder::new("update ");
         builder.push(&self.table);
         builder.push(" set ");
@@ -425,20 +452,34 @@ impl<T> PgRepo<T> {
 
         self.apply_filter(&mut builder, filter);
         let query = builder.build();
-        query.execute(executor).await?;
+        query.execute(&mut *conn).await?;
+
+        if let Some(after_update) = self.after_update_hook {
+            for q in after_update(entity) {
+                q.execute(&mut *conn).await?;
+            }
+        }
+
         Ok(())
     }
 
-    async fn delete_via(&self, executor: impl PgExecutor<'_>, filter: &F) -> Result<()> {
+    async fn delete_via(&self, conn: &mut PgConnection, filter: &F) -> Result<()> {
         let mut builder: QueryBuilder<Postgres> = QueryBuilder::new("delete from ");
         builder.push(&self.table);
         self.apply_filter(&mut builder, filter);
         let query = builder.build();
-        query.execute(executor).await?;
+        query.execute(&mut *conn).await?;
+
+        if let Some(after_delete) = self.after_delete_hook {
+            for q in after_delete(filter) {
+                q.execute(&mut *conn).await?;
+            }
+        }
+
         Ok(())
     }
 
-    async fn add_via(&self, executor: impl PgExecutor<'_>, entity: &T) -> Result<()> {
+    async fn add_via(&self, conn: &mut PgConnection, entity: &T) -> Result<()> {
         let data = (self.dump)(entity);
         let mut builder: QueryBuilder<Postgres> = QueryBuilder::new("insert into ");
         builder.push(&self.table);
@@ -456,17 +497,24 @@ impl<T> PgRepo<T> {
         }
         builder.push(")");
         let query = builder.build();
-        query.execute(executor).await?;
+        query.execute(&mut *conn).await?;
+
+        if let Some(after_add) = self.after_add_hook {
+            for q in after_add(entity) {
+                q.execute(&mut *conn).await?;
+            }
+        }
+
         Ok(())
     }
 
-    async fn exists_via(&self, executor: impl PgExecutor<'_>, filter: &F) -> Result<bool> {
+    async fn exists_via(&self, conn: &mut PgConnection, filter: &F) -> Result<bool> {
         let mut builder: QueryBuilder<Postgres> = QueryBuilder::new("select exists (");
-        builder.push(self.get_query());
+        builder.push(self.query.clone());
         self.apply_filter(&mut builder, filter);
         builder.push(") as result");
         let query = builder.build();
-        let result = query.fetch_one(executor).await;
+        let result = query.fetch_one(&mut *conn).await;
 
         match result {
             Ok(row) => Ok(row.get("result")),
@@ -474,14 +522,14 @@ impl<T> PgRepo<T> {
         }
     }
 
-    async fn count_via(&self, executor: impl PgExecutor<'_>, filter: &F) -> Result<i64> {
+    async fn count_via(&self, conn: &mut PgConnection, filter: &F) -> Result<i64> {
         let mut builder: QueryBuilder<Postgres> =
             QueryBuilder::new("select count(1) as result from (");
-        builder.push(self.get_query());
+        builder.push(self.query.clone());
         self.apply_filter(&mut builder, filter);
         builder.push(") as q");
         let query = builder.build();
-        let result = query.fetch_one(executor).await;
+        let result = query.fetch_one(&mut *conn).await;
 
         match result {
             Ok(row) => Ok(row.get("result")),
@@ -489,12 +537,12 @@ impl<T> PgRepo<T> {
         }
     }
 
-    async fn count_all_via(&self, executor: impl PgExecutor<'_>) -> Result<i64> {
+    async fn count_all_via(&self, conn: &mut PgConnection) -> Result<i64> {
         let mut builder: QueryBuilder<Postgres> =
             QueryBuilder::new("select count(1) as result from (");
-        builder.push(self.get_query()).push(") as q");
+        builder.push(self.query.clone()).push(") as q");
         let query = builder.build();
-        let result = query.fetch_one(executor).await;
+        let result = query.fetch_one(&mut *conn).await;
 
         match result {
             Ok(row) => Ok(row.get("result")),
@@ -512,7 +560,10 @@ where
 
     async fn get<'a>(&self, db: &Self::Db<'a>, filter: &F) -> Result<Option<T>> {
         match db {
-            PgDb::Pool(p) => self.get_via(p, filter, false).await,
+            PgDb::Pool(p) => {
+                let mut conn = p.acquire().await?;
+                self.get_via(&mut conn, filter, false).await
+            }
             PgDb::Transaction(t) => {
                 let mut t = t.write().await;
                 self.get_via(&mut *t, filter, false).await
@@ -522,7 +573,10 @@ where
 
     async fn get_many<'a>(&self, db: &Self::Db<'a>, query: &Query) -> Result<Vec<T>> {
         match db {
-            PgDb::Pool(p) => self.get_many_via(p, query).await,
+            PgDb::Pool(p) => {
+                let mut conn = p.acquire().await?;
+                self.get_many_via(&mut conn, query).await
+            }
             PgDb::Transaction(t) => {
                 let mut t = t.write().await;
                 self.get_many_via(&mut *t, query).await
@@ -532,7 +586,10 @@ where
 
     async fn update<'a>(&self, db: &Self::Db<'a>, filter: &F, entity: &T) -> Result<()> {
         match db {
-            PgDb::Pool(p) => self.update_via(p, filter, entity).await,
+            PgDb::Pool(p) => {
+                let mut conn = p.acquire().await?;
+                self.update_via(&mut conn, filter, entity).await
+            }
             PgDb::Transaction(t) => {
                 let mut t = t.write().await;
                 self.update_via(&mut *t, filter, entity).await
@@ -542,17 +599,23 @@ where
 
     async fn delete<'a>(&self, db: &Self::Db<'a>, filter: &F) -> Result<()> {
         match db {
-            PgDb::Pool(p) => self.delete_via(p, filter).await,
+            PgDb::Pool(p) => {
+                let mut c = p.acquire().await?;
+                self.delete_via(&mut c, filter).await
+            }
             PgDb::Transaction(t) => {
                 let mut t = t.write().await;
-                self.delete_via(&mut *t, filter).await
+                self.delete_via(&mut t, filter).await
             }
         }
     }
 
     async fn add<'a>(&self, db: &Self::Db<'a>, entity: &T) -> Result<()> {
         match db {
-            PgDb::Pool(p) => self.add_via(p, entity).await,
+            PgDb::Pool(p) => {
+                let mut conn = p.acquire().await?;
+                self.add_via(&mut conn, entity).await
+            }
             PgDb::Transaction(t) => {
                 let mut t = t.write().await;
                 self.add_via(&mut *t, entity).await
@@ -562,7 +625,10 @@ where
 
     async fn exists<'a>(&self, db: &Self::Db<'a>, filter: &F) -> Result<bool> {
         match db {
-            PgDb::Pool(p) => self.exists_via(p, filter).await,
+            PgDb::Pool(p) => {
+                let mut conn = p.acquire().await?;
+                self.exists_via(&mut conn, filter).await
+            }
             PgDb::Transaction(t) => {
                 let mut t = t.write().await;
                 self.exists_via(&mut *t, filter).await
@@ -572,7 +638,10 @@ where
 
     async fn count<'a>(&self, db: &Self::Db<'a>, filter: &F) -> Result<i64> {
         match db {
-            PgDb::Pool(p) => self.count_via(p, filter).await,
+            PgDb::Pool(p) => {
+                let mut conn = p.acquire().await?;
+                self.count_via(&mut conn, filter).await
+            }
             PgDb::Transaction(t) => {
                 let mut t = t.write().await;
                 self.count_via(&mut *t, filter).await
@@ -582,7 +651,10 @@ where
 
     async fn count_all<'a>(&self, db: &Self::Db<'a>) -> Result<i64> {
         match db {
-            PgDb::Pool(p) => self.count_all_via(p).await,
+            PgDb::Pool(p) => {
+                let mut conn = p.acquire().await?;
+                self.count_all_via(&mut conn).await
+            }
             PgDb::Transaction(t) => {
                 let mut t = t.write().await;
                 self.count_all_via(&mut *t).await
@@ -592,7 +664,10 @@ where
 
     async fn get_for_update<'a>(&self, db: &Self::Db<'a>, filter: &F) -> Result<Option<T>> {
         match db {
-            PgDb::Pool(p) => self.get_via(p, filter, true).await,
+            PgDb::Pool(p) => {
+                let mut conn = p.acquire().await?;
+                self.get_via(&mut conn, filter, true).await
+            }
             PgDb::Transaction(t) => {
                 let mut t = t.write().await;
                 self.get_via(&mut *t, filter, true).await
