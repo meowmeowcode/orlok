@@ -45,7 +45,7 @@ pub enum Op {
     UuidIn(Vec<Uuid>),
 }
 
-/// Struct for filtering entities.
+/// Enum for filtering entities.
 #[derive(Clone, Debug)]
 pub enum Filter {
     And(Vec<F>),
