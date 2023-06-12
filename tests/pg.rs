@@ -55,7 +55,7 @@ pub async fn db<'a>() -> PgDb<'a> {
     .await
     .unwrap();
 
-    sqlx::query("delete from test_users")
+    sqlx::query("delete from users")
         .execute(&pool)
         .await
         .unwrap();
@@ -64,7 +64,7 @@ pub async fn db<'a>() -> PgDb<'a> {
 }
 
 pub async fn users_repo() -> PgRepo<User> {
-    PgRepo::new("test_users", dump_user, load_user)
+    PgRepo::new("users", dump_user, load_user)
 }
 
 #[tokio::test]

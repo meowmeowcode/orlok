@@ -11,6 +11,7 @@ use std::pin::Pin;
 use anyhow::{bail, Result};
 use async_trait::async_trait;
 
+use sqlx::database::HasArguments;
 use sqlx::postgres::PgRow;
 use sqlx::{PgConnection, PgPool, Postgres, QueryBuilder, Row};
 use tokio::sync::RwLock;
@@ -131,9 +132,8 @@ where
     }
 }
 
-use sqlx::database::HasArguments;
-// type PgQuery<'a> = sqlx::query::Query<'a, Postgres, Postgres>;
-type PgQuery<'a> = sqlx::query::Query<'a, Postgres, <Postgres as HasArguments<'a>>::Arguments>;
+/// SQL query.
+pub type PgQuery<'a> = sqlx::query::Query<'a, Postgres, <Postgres as HasArguments<'a>>::Arguments>;
 
 /// Repository that stores entities in PostgreSQL.
 #[derive(Clone)]
@@ -144,7 +144,6 @@ pub struct PgRepo<T> {
     load: fn(row: &PgRow) -> T,
     after_add_hook: Option<fn(&T) -> Vec<PgQuery>>,
     after_update_hook: Option<fn(&T) -> Vec<PgQuery>>,
-    after_delete_hook: Option<fn(&F) -> Vec<PgQuery>>,
 }
 
 impl<T> PgRepo<T> {
@@ -163,13 +162,28 @@ impl<T> PgRepo<T> {
             query,
             after_add_hook: None,
             after_update_hook: None,
-            after_delete_hook: None,
         }
     }
 
     /// Sets a query to select records from a database.
     pub fn query(mut self, query: impl Into<String>) -> Self {
-        self.query = query.into();
+        let query: String = query.into();
+        let mut builder: QueryBuilder<Postgres> = QueryBuilder::new("");
+        let wrap = ["group", "where", "having"]
+            .iter()
+            .any(|s| query.contains(s));
+
+        if wrap {
+            builder.push("select * from (");
+        }
+
+        builder.push(query);
+
+        if wrap {
+            builder.push(") as filterable_query ");
+        }
+
+        self.query = builder.sql().to_string();
         self
     }
 
@@ -184,13 +198,6 @@ impl<T> PgRepo<T> {
     /// to execute after an updated entity is saved to a database.
     pub fn after_update(mut self, hook: fn(&T) -> Vec<PgQuery>) -> Self {
         self.after_update_hook = Some(hook);
-        self
-    }
-
-    /// Sets a function that returns a vector of queries
-    /// to execute after an entity is deleted from a database.
-    pub fn after_delete(mut self, hook: fn(&F) -> Vec<PgQuery>) -> Self {
-        self.after_delete_hook = Some(hook);
         self
     }
 
@@ -469,13 +476,6 @@ impl<T> PgRepo<T> {
         self.apply_filter(&mut builder, filter);
         let query = builder.build();
         query.execute(&mut *conn).await?;
-
-        if let Some(after_delete) = self.after_delete_hook {
-            for q in after_delete(filter) {
-                q.execute(&mut *conn).await?;
-            }
-        }
-
         Ok(())
     }
 
