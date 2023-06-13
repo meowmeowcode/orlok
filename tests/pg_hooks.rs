@@ -126,6 +126,10 @@ async fn test_one_to_many() {
     repo.add(&db, &alice).await.unwrap();
     let b = repo.get(&db, &F::eq("id", bob.id)).await.unwrap().unwrap();
     assert_eq!(b, bob);
-    let a = repo.get(&db, &F::eq("id", alice.id)).await.unwrap().unwrap();
+    let a = repo
+        .get(&db, &F::eq("id", alice.id))
+        .await
+        .unwrap()
+        .unwrap();
     assert_eq!(a, alice);
 }

@@ -63,8 +63,8 @@ let pool = PgPool::connect("postgresql://orlok:orlok@localhost/orlok")
 
 sqlx::query(
     "create table if not exists characters (
-        id uuid,
-        name text,
+        id uuid primary key,
+        name text not null,
         location text
     )"
 )
@@ -227,8 +227,8 @@ Now we can save new characters:
 # 
 #         sqlx::query(
 #             "create table if not exists characters (
-#                 id uuid,
-#                 name text,
+#                 id uuid primary key,
+#                 name text not null,
 #                 location text
 #             )"
 #         )
@@ -319,8 +319,8 @@ Use the `get` method if you want to load only one entity from the database:
 # 
 #         sqlx::query(
 #             "create table if not exists characters (
-#                 id uuid,
-#                 name text,
+#                 id uuid primary key,
+#                 name text not null,
 #                 location text
 #             )"
 #         )
@@ -415,8 +415,8 @@ The result of this method contains an `Option`, which is `None` if no record was
 # 
 #         sqlx::query(
 #             "create table if not exists characters (
-#                 id uuid,
-#                 name text,
+#                 id uuid primary key,
+#                 name text not null,
 #                 location text
 #             )"
 #         )
@@ -513,8 +513,8 @@ the letter "h" in their name, we can do something like this:
 # 
 #         sqlx::query(
 #             "create table if not exists characters (
-#                 id uuid,
-#                 name text,
+#                 id uuid primary key,
+#                 name text not null,
 #                 location text
 #             )"
 #         )
@@ -608,8 +608,8 @@ Multiple filters can be combined this way:
 # 
 #         sqlx::query(
 #             "create table if not exists characters (
-#                 id uuid,
-#                 name text,
+#                 id uuid primary key,
+#                 name text not null,
 #                 location text
 #             )"
 #         )
@@ -714,8 +714,8 @@ To load several entities, use the `get_many` method:
 # 
 #         sqlx::query(
 #             "create table if not exists characters (
-#                 id uuid,
-#                 name text,
+#                 id uuid primary key,
+#                 name text not null,
 #                 location text
 #             )"
 #         )
@@ -816,8 +816,8 @@ options for the limit, offset, and order of entities that we want to retrieve:
 # 
 #         sqlx::query(
 #             "create table if not exists characters (
-#                 id uuid,
-#                 name text,
+#                 id uuid primary key,
+#                 name text not null,
 #                 location text
 #             )"
 #         )
@@ -925,8 +925,8 @@ an appropriate record in the database:
 # 
 #         sqlx::query(
 #             "create table if not exists characters (
-#                 id uuid,
-#                 name text,
+#                 id uuid primary key,
+#                 name text not null,
 #                 location text
 #             )"
 #         )
@@ -1024,8 +1024,8 @@ Use a closure to execute code in a transaction. Return `Ok` from the closure to 
 # 
 #         sqlx::query(
 #             "create table if not exists characters (
-#                 id uuid,
-#                 name text,
+#                 id uuid primary key,
+#                 name text not null,
 #                 location text
 #             )"
 #         )
@@ -1142,8 +1142,8 @@ For this, we also need a filter:
 # 
 #         sqlx::query(
 #             "create table if not exists characters (
-#                 id uuid,
-#                 name text,
+#                 id uuid primary key,
+#                 name text not null,
 #                 location text
 #             )"
 #         )
@@ -1203,6 +1203,126 @@ For this, we also need a filter:
 #         assert!(characters_repo.exists(&db, &F::eq("name", "Count Orlok")).await?);
 characters_repo.delete(&db, &F::eq("name", "Count Orlok")).await?;
 #         assert!(!characters_repo.exists(&db, &F::eq("name", "Count Orlok")).await?);
+#         Ok(())
+#     })
+# }
+```
+
+### Repository customization
+
+There are some methods that can be helpful if
+you need, for example, to use several tables to store one entity:
+
+```rust
+# use tokio_test;
+# fn main() -> anyhow::Result<()> {
+#     tokio_test::block_on(async {
+#         use sqlx::PgPool;
+#
+#         let pool = PgPool::connect("postgresql://orlok:orlok@localhost/orlok")
+#             .await?;
+#
+#         sqlx::query(
+#             "create table if not exists characters (
+#                 id uuid primary key,
+#                 name text not null,
+#                 location text
+#             )"
+#         )
+#         .execute(&pool)
+#         .await?;
+#         sqlx::query("delete from characters").execute(&pool).await?;
+#         use std::collections::HashMap;
+#         use uuid::Uuid;
+#         use orlok::pg::{Value, PgDb, PgRepo};
+#         use orlok::{Db, F, Repo};
+#         use sqlx::Row;
+#         use sqlx::postgres::PgRow;
+#
+#         let db = PgDb::new(pool.clone());
+sqlx::query(
+    "create table if not exists items (
+        id uuid primary key,
+        name text not null,
+        character_id uuid references characters(id) on delete cascade
+    )"
+)
+.execute(&pool)
+.await?;
+#         sqlx::query("delete from items").execute(&pool).await?;
+
+#[derive(PartialEq, Clone, Debug)]
+pub struct Character {
+    pub id: Uuid,
+    pub name: String,
+    pub items: Vec<String>,
+}
+
+impl Character {
+    pub fn new(name: String) -> Self {
+        Self {
+            id: Uuid::new_v4(),
+            name,
+            items: Vec::new(),
+        }
+    }
+}
+
+fn dump_character(u: &Character) -> HashMap<String, Value> {
+    HashMap::from([
+        ("id".to_string(), u.id.into()),
+        ("name".to_string(), u.name.clone().into()),
+    ])
+}
+
+fn load_character(row: &PgRow) -> Character {
+    Character {
+        id: row.get("id"),
+        name: row.get("name"),
+        items: row.get("items"),
+    }
+}
+
+let characters_repo = PgRepo::new("characters", dump_character, load_character)
+    .query("
+        select characters.id, characters.name, array_agg(items.name) as items
+        from characters
+        left join items
+        on items.character_id = characters.id
+        group by characters.id, characters.name
+    ")
+    .after_add(|character| {
+        character.items
+            .iter()
+            .map(|item| {
+                sqlx::query("insert into items (id, character_id, name) values ($1, $2, $3)")
+                    .bind(Uuid::new_v4())
+                    .bind(character.id)
+                    .bind(item)
+            })
+            .collect()
+    })
+    .after_update(|character| {
+        let mut queries = vec![sqlx::query("delete from items where character_id = $1").bind(character.id)];
+        queries.extend(character.items.iter().map(|item| {
+            sqlx::query("insert into items (id, character_id, name) values ($1, $2, $3)")
+                .bind(Uuid::new_v4())
+                .bind(character.id)
+                .bind(item)
+        }));
+        queries
+    });
+
+let mut orlok = Character::new("Orlok".to_string());
+orlok.items = vec!["Coffin".to_string(), "Vampire's coat".to_string()];
+characters_repo.add(&db, &orlok).await?;
+let mut thomas = Character::new("Thomas".to_string());
+thomas.items = vec!["Book about vampires".to_string()];
+characters_repo.add(&db, &thomas).await?;
+let c = characters_repo.get(&db, &F::eq("name", "Orlok")).await?.unwrap();
+assert_eq!(c.items, vec!["Coffin".to_string(), "Vampire's coat".to_string()]);
+let c = characters_repo.get(&db, &F::eq("name", "Thomas")).await?.unwrap();
+assert_eq!(c.items, vec!["Book about vampires".to_string()]);
 #         Ok(())
 #     })
 # }

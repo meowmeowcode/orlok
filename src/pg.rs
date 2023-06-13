@@ -169,7 +169,7 @@ impl<T> PgRepo<T> {
     pub fn query(mut self, query: impl Into<String>) -> Self {
         let query: String = query.into();
         let mut builder: QueryBuilder<Postgres> = QueryBuilder::new("");
-        let wrap = ["group", "where", "having"]
+        let wrap = ["group", "where", "having", "order"]
             .iter()
             .any(|s| query.contains(s));
 
