@@ -1,17 +1,12 @@
-use orlok::pg::PgDb;
-use orlok::Repo;
-use orlok::F;
-use sqlx::PgPool;
-use sqlx::Row;
-use uuid::Uuid;
-
 use std::collections::HashMap;
 
-use orlok::pg::Value;
-
+use sqlx::{PgPool, Row};
 use sqlx::postgres::PgRow;
+use uuid::Uuid;
 
-use orlok::pg::PgRepo;
+use orlok::{Repo, F};
+use orlok::pg::{PgDb, PgRepo, Value};
+
 
 #[derive(Debug, PartialEq)]
 struct User {
@@ -48,13 +43,11 @@ fn load_user(row: &PgRow) -> User {
 fn users_repo() -> PgRepo<User> {
     PgRepo::new("users_with_emails", dump_user, load_user)
         .query(
-            "
-            select u.id, u.name, array_agg(emails.email) as emails
+            "select u.id, u.name, array_agg(emails.email) as emails
             from users_with_emails as u
             left join emails
             on emails.user_id = u.id
-            group by u.id, u.name
-        ",
+            group by u.id, u.name",
         )
         .after_add(|u| {
             u.emails
