@@ -50,6 +50,7 @@ pub enum Op {
 pub enum Filter {
     And(Vec<F>),
     Or(Vec<F>),
+    Not(Box<F>),
     IsNone(String),
     Value { field: String, op: Op },
 }
@@ -472,6 +473,11 @@ impl Filter {
     /// Creates a filter that joins multiple filters with the OR operator.
     pub fn or(filters: Vec<F>) -> Self {
         Self::Or(filters)
+    }
+
+    /// Creates a filter that adds the NOT operator to a wrapped filter.
+    pub fn not(filter: F) -> Self {
+        Self::Not(Box::new(filter))
     }
 }
 

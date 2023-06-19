@@ -178,6 +178,7 @@ fn matches_filter(v: &Value, f: &F) -> Result<bool> {
     Ok(match f {
         F::And(filters) => matches_all_filters(v, filters)?,
         F::Or(filters) => matches_any_filter(v, filters)?,
+        F::Not(filter) => !matches_filter(v, filter)?,
         F::IsNone(field) => v[field].is_null(),
         F::Value { field, op } => {
             if let Some(val) = v.get(field) {

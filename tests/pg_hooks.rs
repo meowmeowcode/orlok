@@ -1,12 +1,11 @@
 use std::collections::HashMap;
 
-use sqlx::{PgPool, Row};
 use sqlx::postgres::PgRow;
+use sqlx::{PgPool, Row};
 use uuid::Uuid;
 
-use orlok::{Repo, F};
 use orlok::pg::{PgDb, PgRepo, Value};
-
+use orlok::{Repo, F};
 
 #[derive(Debug, PartialEq)]
 struct User {

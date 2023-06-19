@@ -172,7 +172,7 @@ async fn get_many() {
     let eve = common::add_eve(&db, &repo).await;
 
     let cases = [
-        // and, or:
+        // and, or, not:
         (
             Q::filter(F::and(vec![F::gt("age", alice.age), F::lt("age", eve.age)])),
             vec![&bob],
@@ -181,6 +181,7 @@ async fn get_many() {
             Q::filter(F::or(vec![F::eq("age", alice.age), F::eq("age", eve.age)])),
             vec![&alice, &eve],
         ),
+        (Q::filter(F::not(F::eq("name", "Eve"))), vec![&alice, &bob]),
         // none filter:
         (Q::filter(F::is_none("weight")), vec![&eve]),
         // i64 filters:

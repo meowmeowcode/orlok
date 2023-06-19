@@ -225,6 +225,11 @@ impl<T> PgRepo<T> {
                 }
                 builder.push(")");
             }
+            F::Not(filter) => {
+                builder.push("not (");
+                self.add_condition(builder, filter);
+                builder.push(")");
+            }
             F::IsNone(field) => {
                 builder.push(field).push(" is null");
             }
